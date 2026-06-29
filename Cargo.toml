@@ -1,0 +1,43 @@
+[package]
+name = "portal"
+version = "0.1.0"
+edition = "2021"
+description = "Portal — the HOLDFAST apex launcher/dashboard (gateway-SSO fronted, live service tiles)."
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "portal"
+path = "src/lib.rs"
+
+[[bin]]
+name = "portal"
+path = "src/main.rs"
+
+[dependencies]
+# HTTP framework (shared with keystone/keyward/beacon): State/HeaderMap extractors, Html responses.
+axum = "0.8"
+# Async runtime axum runs on. `net`/`io-util`/`time` back the dependency-light outbound fetch
+# of Beacon's status JSON (raw TCP + tokio-rustls HTTP/1.1 GET with a short timeout). The
+# dashboard handler `.await`s the fetch directly, so a worker thread is never blocked.
+# `rt-multi-thread` keeps the serving runtime parallel under load.
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
+# (De)serialize the PORTAL_CATALOG override + the parsed Beacon status snapshot.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Ergonomic IO error wrapping for the Beacon fetch.
+thiserror = "2"
+# Structured logging.
+tracing = "0.1"
+tracing-subscriber = "0.3"
+# TLS client for an https BEACON_URL. rustls with the `ring` backend (NOT aws-lc-rs) avoids
+# the C/cmake toolchain — the same portability choice keystone/keyward/beacon made.
+# `webpki-roots` bundles the Mozilla trust anchors so the runtime image needs no system CA
+# store. The default internal hop is plain http://beacon:8400 (no TLS), but an https override
+# stays supported.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+webpki-roots = "0.26"
+
+[dev-dependencies]
+# ServiceExt::oneshot drives the Router in-process for the end-to-end tests (no port bind).
+tower = { version = "0.5", features = ["util"] }
