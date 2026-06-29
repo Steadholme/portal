@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>HOLDFAST · Sovereign Cloud</title>
+  <title>HOLDFAST · Command Center</title>
   <style>{{CSS}}</style>
 </head>
 <body class="page-console">
@@ -13,24 +13,52 @@
       <a class="brand" href="/" aria-label="HOLDFAST home">
         <span class="brand__glyph" aria-hidden="true">{{SHIELD}}</span>
         <span class="brand__word">HOLDFAST</span>
+        <span class="brand__tag">Command Center</span>
       </a>
       <div class="topbar__right">
-        <span class="topbar__title">Portal</span>
-        <span class="user-email">{{EMAIL}}</span>
+        <span class="user" title="{{EMAIL}}">
+          <span class="user__avatar" aria-hidden="true">{{INITIAL}}</span>
+          <span class="user__email">{{EMAIL}}</span>
+        </span>
         <a class="btn btn-ghost btn-sm" href="https://id.w33d.xyz/_gw/auth/logout">Log out</a>
       </div>
     </div>
   </header>
 
-  <main class="console">
-    <div class="console__head">
-      <h1>HOLDFAST · Sovereign Cloud</h1>
-      <p class="sub">Welcome, {{EMAIL}}. Your services, one launchpad.</p>
+  <section class="hero">
+    <div class="hero__inner">
+      <p class="hero__eyebrow">Sovereign Cloud · Operations</p>
+      <h1 class="hero__title">{{GREETING}}</h1>
+      <p class="hero__sub">{{HERO_SUB}}</p>
     </div>
+  </section>
 
-    <section class="tiles">
-      {{TILES}}
+  <main class="console">
+    <section class="metrics" aria-label="Live metrics">
+      {{METRICS}}
     </section>
+
+    <div class="grid">
+      <section class="panel panel--services">
+        <div class="panel__head">
+          <h2 class="panel__title">Services</h2>
+          <span class="panel__hint">Live status from Beacon</span>
+        </div>
+        <div class="tiles">
+          {{TILES}}
+        </div>
+      </section>
+
+      <aside class="panel panel--activity">
+        <div class="panel__head">
+          <h2 class="panel__title">Recent activity</h2>
+          <span class="panel__hint">Audit trail</span>
+        </div>
+        <div class="feed">
+          {{ACTIVITY}}
+        </div>
+      </aside>
+    </div>
   </main>
 
   <footer class="site-foot">

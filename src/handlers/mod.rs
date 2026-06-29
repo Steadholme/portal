@@ -70,6 +70,130 @@ pub fn icon_svg(key: &str) -> &'static str {
         "vitals" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 5.6a5 5 0 0 0-8.8 1.4 5 5 0 0 0-8.8-1.4 5 5 0 0 0 1.3 6L12 20l7.5-8.4a5 5 0 0 0 1.3-6Z"/></svg>"##,
         "audit" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>"##,
         "mail" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>"##,
+        "blog" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M14 4v5h5"/><path d="M8 13h8M8 17h6"/></svg>"##,
+        "forum" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10h8M8 14h5"/><path d="M21 12a7 7 0 0 1-7 7H8l-4 3v-4.3A7 7 0 0 1 8 5h6a7 7 0 0 1 7 7Z"/></svg>"##,
+        "wiki" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h6v18H6a2 2 0 0 0-2 2V5Z"/><path d="M20 5a2 2 0 0 0-2-2h-6v18h6a2 2 0 0 1 2 2V5Z"/></svg>"##,
+        "paste" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2"/><path d="m9 13 2 2 4-4"/></svg>"##,
         _ => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>"##,
+    }
+}
+
+/// Time-of-day greeting from a 0..=23 hour. Kept pure so the handler computes the hour and
+/// the wording stays unit-testable.
+pub fn greeting(hour: u32) -> &'static str {
+    match hour {
+        5..=11 => "Good morning",
+        12..=16 => "Good afternoon",
+        _ => "Good evening",
+    }
+}
+
+/// Friendly display name from a signed-in email: the local-part, first letter capitalized
+/// (`alice@holdfast.local` -> `Alice`). Falls back to the whole string when there's no `@`,
+/// and to `Operator` when blank.
+pub fn name_from_email(email: &str) -> String {
+    let local = email.split('@').next().unwrap_or(email).trim();
+    if local.is_empty() {
+        return "Operator".to_string();
+    }
+    let mut chars = local.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => "Operator".to_string(),
+    }
+}
+
+/// Compact relative time ("just now", "5m ago", "3h ago", "2d ago", "4w ago") from two epoch
+/// SECOND timestamps. A negative delta (clock skew) reads "just now".
+pub fn rel_time(then_secs: i64, now_secs: i64) -> String {
+    let d = now_secs - then_secs;
+    if d < 60 {
+        "just now".to_string()
+    } else if d < 3_600 {
+        format!("{}m ago", d / 60)
+    } else if d < 86_400 {
+        format!("{}h ago", d / 3_600)
+    } else if d < 1_209_600 {
+        format!("{}d ago", d / 86_400)
+    } else {
+        format!("{}w ago", d / 604_800)
+    }
+}
+
+/// CSS modifier class for an audit event's severity dot. Unknown/blank severities read as
+/// informational so a sparsely-tagged event still renders cleanly.
+pub fn severity_dot_class(severity: &str) -> &'static str {
+    match severity.to_ascii_lowercase().as_str() {
+        "critical" | "crit" | "alert" | "emergency" | "fatal" => "sev-crit",
+        "error" | "err" => "sev-err",
+        "warn" | "warning" => "sev-warn",
+        _ => "sev-info",
+    }
+}
+
+/// Format an optional percentage gauge as a clean big-number ("43%"), or the "—" placeholder
+/// when the backend gave us nothing.
+pub fn fmt_pct(value: Option<f64>) -> String {
+    match value {
+        Some(v) => format!("{:.0}%", v.clamp(0.0, 100.0)),
+        None => "—".to_string(),
+    }
+}
+
+/// Clamp a percentage to a 0..=100 bar width (defaults to 0 when absent).
+pub fn pct_width(value: Option<f64>) -> f64 {
+    value.unwrap_or(0.0).clamp(0.0, 100.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn greeting_by_hour() {
+        assert_eq!(greeting(8), "Good morning");
+        assert_eq!(greeting(14), "Good afternoon");
+        assert_eq!(greeting(19), "Good evening");
+        assert_eq!(greeting(2), "Good evening");
+    }
+
+    #[test]
+    fn name_from_email_uses_capitalized_local_part() {
+        assert_eq!(name_from_email("alice@holdfast.local"), "Alice");
+        assert_eq!(name_from_email("operator"), "Operator");
+        assert_eq!(name_from_email(""), "Operator");
+        assert_eq!(name_from_email("  "), "Operator");
+    }
+
+    #[test]
+    fn rel_time_buckets() {
+        let now = 1_000_000_000;
+        assert_eq!(rel_time(now, now), "just now");
+        assert_eq!(rel_time(now - 30, now), "just now");
+        assert_eq!(rel_time(now - 120, now), "2m ago");
+        assert_eq!(rel_time(now - 7_200, now), "2h ago");
+        assert_eq!(rel_time(now - 172_800, now), "2d ago");
+        assert_eq!(rel_time(now - 1_814_400, now), "3w ago");
+        // Clock skew (event in the future) never panics or underflows.
+        assert_eq!(rel_time(now + 50, now), "just now");
+    }
+
+    #[test]
+    fn severity_dot_classes() {
+        assert_eq!(severity_dot_class("critical"), "sev-crit");
+        assert_eq!(severity_dot_class("ERROR"), "sev-err");
+        assert_eq!(severity_dot_class("warning"), "sev-warn");
+        assert_eq!(severity_dot_class("info"), "sev-info");
+        assert_eq!(severity_dot_class(""), "sev-info");
+    }
+
+    #[test]
+    fn fmt_pct_and_width() {
+        assert_eq!(fmt_pct(Some(42.7)), "43%");
+        assert_eq!(fmt_pct(Some(150.0)), "100%");
+        assert_eq!(fmt_pct(None), "—");
+        assert_eq!(pct_width(Some(42.0)), 42.0);
+        assert_eq!(pct_width(Some(-5.0)), 0.0);
+        assert_eq!(pct_width(None), 0.0);
     }
 }

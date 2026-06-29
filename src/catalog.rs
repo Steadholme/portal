@@ -32,9 +32,11 @@ pub struct CatalogEntry {
     pub coming_soon: bool,
 }
 
-/// The built-in HOLDFAST service catalog: Identity, Status, Vitals, Audit, and the
+/// The built-in HOLDFAST service catalog: the four platform services (Identity, Status,
+/// Vitals, Audit), the four Phase-1 content services (Blog, Forum, Wiki, Paste), and the
 /// reserved-for-Corvid Mail tile (coming soon). Each maps to a Beacon component name for its
-/// live status; an operator overrides the whole list via `PORTAL_CATALOG`.
+/// live status; an operator overrides the whole list via `PORTAL_CATALOG`. The component
+/// names mirror the deploy's `BEACON_SEED`, so the live pills resolve out of the box.
 pub fn default_catalog() -> Vec<CatalogEntry> {
     vec![
         CatalogEntry {
@@ -70,6 +72,38 @@ pub fn default_catalog() -> Vec<CatalogEntry> {
             coming_soon: false,
         },
         CatalogEntry {
+            name: "Blog".to_string(),
+            url: "https://blog.w33d.xyz".to_string(),
+            description: "Personal blog and field notes.".to_string(),
+            component: "Blog".to_string(),
+            icon: "blog".to_string(),
+            coming_soon: false,
+        },
+        CatalogEntry {
+            name: "Forum".to_string(),
+            url: "https://forum.w33d.xyz".to_string(),
+            description: "Discussion for the keep — categories, threads & replies.".to_string(),
+            component: "Forum".to_string(),
+            icon: "forum".to_string(),
+            coming_soon: false,
+        },
+        CatalogEntry {
+            name: "Wiki".to_string(),
+            url: "https://wiki.w33d.xyz".to_string(),
+            description: "Knowledge base and operational runbooks.".to_string(),
+            component: "Wiki".to_string(),
+            icon: "wiki".to_string(),
+            coming_soon: false,
+        },
+        CatalogEntry {
+            name: "Paste".to_string(),
+            url: "https://paste.w33d.xyz".to_string(),
+            description: "Share code snippets and pastes across the estate.".to_string(),
+            component: "Pastefire".to_string(),
+            icon: "paste".to_string(),
+            coming_soon: false,
+        },
+        CatalogEntry {
             name: "Mail".to_string(),
             url: "https://mail.w33d.xyz".to_string(),
             description: "Secure mail and messaging (Corvid).".to_string(),
@@ -91,9 +125,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_catalog_has_the_five_holdfast_services() {
+    fn default_catalog_has_the_nine_holdfast_services() {
         let cat = default_catalog();
-        assert_eq!(cat.len(), 5);
+        assert_eq!(cat.len(), 9);
 
         let identity = cat.iter().find(|e| e.name == "Identity").expect("Identity tile");
         assert_eq!(identity.url, "https://id.w33d.xyz");
@@ -104,7 +138,13 @@ mod tests {
         assert_eq!(mail.url, "https://mail.w33d.xyz");
         assert!(mail.coming_soon, "Mail is reserved for Corvid — coming soon");
 
-        for name in ["Status", "Vitals", "Audit"] {
+        // Status maps to Beacon's Gateway component; Paste maps to the Pastefire component.
+        let status = cat.iter().find(|e| e.name == "Status").expect("Status tile");
+        assert_eq!(status.component, "Gateway");
+        let paste = cat.iter().find(|e| e.name == "Paste").expect("Paste tile");
+        assert_eq!(paste.component, "Pastefire");
+
+        for name in ["Vitals", "Audit", "Blog", "Forum", "Wiki"] {
             assert!(cat.iter().any(|e| e.name == name), "{name} tile present");
         }
     }

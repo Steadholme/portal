@@ -1,9 +1,10 @@
 //! End-to-end Portal contract test against dev state (NO database, NO disk).
 //!
-//! Drives the real Router in-process via `tower::oneshot`. A tiny in-process "fake Beacon"
-//! (a one-shot `tokio::net::TcpListener` that writes a canned HTTP/1.1 response) stands in
-//! for the real Beacon `/api/status`, so the live-status mapping and the
-//! resilient-when-down path are both exercised with no external services.
+//! Drives the real Router in-process via `tower::oneshot`. Tiny in-process "fake backends"
+//! (one-shot `tokio::net::TcpListener`s that answer canned HTTP/1.1 JSON, routed by path)
+//! stand in for the real Beacon `/api/status`, Vitals `/api/metrics`, and Watchtower
+//! `/api/verify` + `/api/events`, so the live data wiring AND the resilient-when-down path
+//! are both exercised with no external services.
 
 use std::sync::Arc;
 
@@ -37,33 +38,52 @@ fn get_as(uri: &str, email: &str) -> Request<Body> {
         .unwrap()
 }
 
-/// State whose Beacon URL points at `beacon_url` (dev catalog otherwise).
-fn state_with_beacon(beacon_url: &str) -> AppState {
+/// State whose backend URLs point at the given fakes (dev catalog otherwise).
+fn state_with(beacon: &str, vitals: &str, watchtower: &str) -> AppState {
     let mut config = Config::dev();
-    config.beacon_url = beacon_url.to_string();
+    config.beacon_url = beacon.to_string();
+    config.vitals_url = vitals.to_string();
+    config.watchtower_url = watchtower.to_string();
     let mut state = build_dev_state();
     state.config = Arc::new(config);
     state
 }
 
-/// Spawn a one-shot fake Beacon that answers exactly one connection with `json` as the body
-/// of a 200 response, then returns its `http://127.0.0.1:PORT` base URL.
-async fn fake_beacon(json: &'static str) -> String {
+/// Spawn a fake JSON service that answers every connection by matching the request path
+/// against `routes` (first prefix match wins) and writing that body in a 200 response.
+/// Unmatched paths get `{}`. Returns its `http://127.0.0.1:PORT` base URL.
+async fn fake_service(routes: &'static [(&'static str, &'static str)]) -> String {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        if let Ok((mut sock, _)) = listener.accept().await {
-            // Drain the request (we don't route on it) up to the first read.
-            let mut buf = [0u8; 1024];
-            let _ = sock.read(&mut buf).await;
-            let resp = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                json.len(),
-                json
-            );
-            let _ = sock.write_all(resp.as_bytes()).await;
-            let _ = sock.flush().await;
+        loop {
+            let (mut sock, _) = match listener.accept().await {
+                Ok(pair) => pair,
+                Err(_) => break,
+            };
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let path = req
+                    .lines()
+                    .next()
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .unwrap_or("/");
+                let body = routes
+                    .iter()
+                    .find(|(p, _)| path.starts_with(p))
+                    .map(|(_, b)| *b)
+                    .unwrap_or("{}");
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = sock.write_all(resp.as_bytes()).await;
+                let _ = sock.flush().await;
+            });
         }
     });
     format!("http://{addr}")
@@ -73,37 +93,73 @@ async fn fake_beacon(json: &'static str) -> String {
 
 #[tokio::test]
 async fn healthz_ok() {
-    let state = build_dev_state();
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
     let (status, body) = call(&state, get("/healthz")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, "ok");
 }
 
 #[tokio::test]
-async fn dashboard_renders_tiles_with_email_and_live_pills() {
-    // Fake Beacon reports Identity operational, Gateway degraded.
-    let beacon = fake_beacon(
+async fn dashboard_renders_full_command_center() {
+    // Beacon: Identity operational, Gateway degraded -> 1 of 2 systems operational.
+    let beacon = fake_service(&[(
+        "/api/status",
         r#"{"overall":"degraded","updated_at":1,"components":[
             {"name":"Identity","kind":"tcp","status":"operational","uptime_24h":100.0},
             {"name":"Gateway","kind":"http","status":"degraded","uptime_24h":97.0}
         ],"incidents":[]}"#,
-    )
+    )])
     .await;
-    let state = state_with_beacon(&beacon);
+    // Vitals: latest cpu 42%, mem 63%, load1 0.75.
+    let vitals = fake_service(&[(
+        "/api/metrics",
+        r#"{"samples":[
+            {"host":"h","metric":"cpu_pct","value":42.0,"ts":200},
+            {"host":"h","metric":"mem_pct","value":63.0,"ts":200},
+            {"host":"h","metric":"load1","value":0.75,"ts":200}
+        ]}"#,
+    )])
+    .await;
+    // Watchtower: a verified 3-event chain + one recent login event.
+    let watchtower = fake_service(&[
+        ("/api/verify", r#"{"ok":true,"count":3,"head_hash":"abc"}"#),
+        (
+            "/api/events",
+            r#"[{"seq":3,"ts":1700000000000,"actor":"alice@holdfast.local","action":"login","target":"keystone","severity":"info","detail":"d","source":"gw","prev_hash":"p","hash":"h"}]"#,
+        ),
+    ])
+    .await;
 
+    let state = state_with(&beacon, &vitals, &watchtower);
     let (status, html) = call(&state, get_as("/", "alice@holdfast.local")).await;
     assert_eq!(status, StatusCode::OK);
 
-    // Heading + the signed-in email from X-Auth-Email.
-    assert!(html.contains("HOLDFAST · Sovereign Cloud"), "brand heading present");
+    // Greeting uses the email local-part (capitalized); the full email shows in the app-bar.
+    assert!(html.contains(", Alice"), "greeting names the signed-in user");
     assert!(html.contains("alice@holdfast.local"), "signed-in email rendered");
 
-    // Tiles for the default catalog services + links to their public subdomains.
+    // Live metric cards.
+    assert!(html.contains("Systems online"), "systems-online card present");
+    assert!(
+        html.contains(r#"1<span class="metric__unit">/2</span>"#),
+        "systems-online shows 1/2"
+    );
+    assert!(html.contains("42%"), "host CPU gauge");
+    assert!(html.contains("63%"), "host memory gauge");
+    assert!(html.contains("0.75"), "load average");
+    assert!(html.contains("Audit events"), "audit card present");
+    assert!(html.contains("Chain verified"), "audit chain shows verified");
+
+    // Services grid: all nine default tiles + their public subdomains.
     for (name, url) in [
         ("Identity", "https://id.w33d.xyz"),
         ("Status", "https://status.w33d.xyz"),
         ("Vitals", "https://vitals.w33d.xyz"),
         ("Audit", "https://audit.w33d.xyz"),
+        ("Blog", "https://blog.w33d.xyz"),
+        ("Forum", "https://forum.w33d.xyz"),
+        ("Wiki", "https://wiki.w33d.xyz"),
+        ("Paste", "https://paste.w33d.xyz"),
         ("Mail", "https://mail.w33d.xyz"),
     ] {
         assert!(html.contains(name), "{name} tile rendered");
@@ -113,10 +169,16 @@ async fn dashboard_renders_tiles_with_email_and_live_pills() {
     // Live pills mapped from Beacon: Identity -> Operational, Status(=Gateway) -> Degraded.
     assert!(html.contains(">Operational<"), "Identity shows Operational pill");
     assert!(html.contains(">Degraded<"), "Status(Gateway) shows Degraded pill");
-    // Mail is coming soon (no live pill).
+    // Mail is coming soon (no live pill); unmapped components fall back to Unknown.
     assert!(html.contains(">Coming soon<"), "Mail shows Coming soon tag");
-    // Components Beacon doesn't report (Vitals/Audit) fall back to Unknown.
     assert!(html.contains(">Unknown<"), "unmapped components show Unknown");
+
+    // Recent-activity feed from Watchtower.
+    assert!(html.contains("login"), "activity feed shows the action");
+    assert!(
+        html.contains(r#"class="feed__item""#),
+        "activity feed rendered an item"
+    );
 
     // Logout points at the gateway on the issuer host (absolute, cross-subdomain).
     assert!(
@@ -126,15 +188,22 @@ async fn dashboard_renders_tiles_with_email_and_live_pills() {
 }
 
 #[tokio::test]
-async fn dashboard_is_resilient_when_beacon_is_down() {
-    // Point at a closed port: the fetch fails fast and every live tile renders Unknown.
-    let state = state_with_beacon("http://127.0.0.1:1");
+async fn dashboard_is_resilient_when_all_backends_down() {
+    // Point every backend at a closed port: each fetch fails fast and the page still renders.
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
 
     let (status, html) = call(&state, get_as("/", "bob@holdfast.local")).await;
-    assert_eq!(status, StatusCode::OK, "page renders even when Beacon is down");
+    assert_eq!(status, StatusCode::OK, "page renders even when every backend is down");
     assert!(html.contains("bob@holdfast.local"), "email still rendered");
+
+    // Unknown pills + "—" placeholders everywhere; no error, no panic.
     assert!(html.contains(">Unknown<"), "down Beacon -> Unknown pills");
-    // The four live tiles all degrade to Unknown; only Mail keeps its Coming soon tag.
+    assert!(html.contains("—"), "missing metrics render the em-dash placeholder");
+    assert!(html.contains("awaiting Beacon"), "systems card degrades gracefully");
+    assert!(html.contains("awaiting Vitals"), "gauges degrade gracefully");
+    assert!(html.contains("awaiting Watchtower"), "audit card degrades gracefully");
+    assert!(html.contains("No recent activity"), "empty activity feed placeholder");
+    // Coming-soon tile is unaffected by backend health.
     assert!(html.contains(">Coming soon<"), "coming-soon tile unaffected");
 }
 
@@ -142,8 +211,9 @@ async fn dashboard_is_resilient_when_beacon_is_down() {
 async fn dashboard_without_gateway_identity_falls_back() {
     // No X-Auth-Email (e.g. a direct dev hit) — the page renders with a generic label,
     // never erroring on the missing identity.
-    let state = state_with_beacon("http://127.0.0.1:1");
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
     let (status, html) = call(&state, get("/")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("operator"), "falls back to a generic signed-in label");
+    assert!(html.contains(", Operator"), "greeting falls back gracefully");
 }

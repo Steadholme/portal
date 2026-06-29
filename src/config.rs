@@ -12,6 +12,12 @@ pub const DEFAULT_BIND_ADDR: &str = "0.0.0.0:8600";
 /// Default INTERNAL Beacon base URL. The dashboard appends `/api/status` to fetch the live
 /// component snapshot over the `holdfast` Docker network.
 pub const DEFAULT_BEACON_URL: &str = "http://beacon:8400";
+/// Default INTERNAL Vitals base URL. The metric cards append `/api/metrics` for the latest
+/// host CPU / memory / load gauges.
+pub const DEFAULT_VITALS_URL: &str = "http://vitals:8300";
+/// Default INTERNAL Watchtower base URL. The audit card appends `/api/verify` (chain count +
+/// integrity) and the activity feed appends `/api/events`.
+pub const DEFAULT_WATCHTOWER_URL: &str = "http://watchtower:8500";
 
 /// Runtime configuration. Cheap to clone; shared read-only behind `Arc`.
 #[derive(Clone, Debug)]
@@ -20,6 +26,11 @@ pub struct Config {
     pub bind_addr: String,
     /// INTERNAL Beacon base URL (`BEACON_URL`); the live-status fetch hits `<url>/api/status`.
     pub beacon_url: String,
+    /// INTERNAL Vitals base URL (`VITALS_URL`); the metric cards hit `<url>/api/metrics`.
+    pub vitals_url: String,
+    /// INTERNAL Watchtower base URL (`WATCHTOWER_URL`); the audit card hits `<url>/api/verify`
+    /// and the activity feed hits `<url>/api/events`.
+    pub watchtower_url: String,
     /// Service tiles rendered on the dashboard (`PORTAL_CATALOG` JSON override, else the
     /// built-in HOLDFAST default).
     pub catalog: Vec<CatalogEntry>,
@@ -31,6 +42,8 @@ impl Config {
         Config {
             bind_addr: DEFAULT_BIND_ADDR.to_string(),
             beacon_url: DEFAULT_BEACON_URL.to_string(),
+            vitals_url: DEFAULT_VITALS_URL.to_string(),
+            watchtower_url: DEFAULT_WATCHTOWER_URL.to_string(),
             catalog: default_catalog(),
         }
     }
@@ -43,6 +56,12 @@ impl Config {
         }
         if let Some(v) = env_nonempty("BEACON_URL") {
             config.beacon_url = v;
+        }
+        if let Some(v) = env_nonempty("VITALS_URL") {
+            config.vitals_url = v;
+        }
+        if let Some(v) = env_nonempty("WATCHTOWER_URL") {
+            config.watchtower_url = v;
         }
         if let Some(raw) = env_nonempty("PORTAL_CATALOG") {
             match parse_catalog(&raw) {

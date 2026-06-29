@@ -39,9 +39,12 @@ RUN useradd --system --uid 10001 --user-group --no-create-home portal
 COPY --from=builder /build/target/release/portal /usr/local/bin/portal
 
 USER portal
-# Default in-container bind + Beacon URL; overridable at runtime.
+# Default in-container bind + internal backend URLs; overridable at runtime. The dashboard
+# fetches all three concurrently (resilient: any unreachable backend degrades to "—"/unknown).
 ENV BIND_ADDR=0.0.0.0:8600
 ENV BEACON_URL=http://beacon:8400
+ENV VITALS_URL=http://vitals:8300
+ENV WATCHTOWER_URL=http://watchtower:8500
 EXPOSE 8600
 
 # Dependency-free liveness probe -> GET /healthz on the loopback, exit 0/1.

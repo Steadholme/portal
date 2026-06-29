@@ -15,21 +15,26 @@ pub mod beacon;
 pub mod catalog;
 pub mod config;
 pub mod handlers;
+pub mod http;
+pub mod snapshot;
+pub mod vitals;
+pub mod watchtower;
 
 use std::sync::Arc;
 
 use axum::routing::get;
 use axum::Router;
 
-use crate::beacon::{StatusCache, CACHE_TTL};
 use crate::config::Config;
+use crate::snapshot::{SnapshotCache, CACHE_TTL};
 
 /// Shared application state. Cheap to clone (everything behind `Arc`). Portal holds no
-/// persistent store — only the immutable [`Config`] and the few-second Beacon status cache.
+/// persistent store — only the immutable [`Config`] and the few-second live-data snapshot
+/// cache (Beacon statuses + Vitals gauges + Watchtower audit summary, fetched concurrently).
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
-    pub cache: StatusCache,
+    pub cache: SnapshotCache,
 }
 
 /// Build the router wiring all endpoints onto `state`.
@@ -46,7 +51,7 @@ pub fn app(state: AppState) -> Router {
 pub fn build_dev_state() -> AppState {
     AppState {
         config: Arc::new(Config::dev()),
-        cache: StatusCache::new(CACHE_TTL),
+        cache: SnapshotCache::new(CACHE_TTL),
     }
 }
 
@@ -56,6 +61,6 @@ pub fn build_dev_state() -> AppState {
 pub async fn build_state_from_env() -> Result<AppState, String> {
     Ok(AppState {
         config: Arc::new(Config::from_env()),
-        cache: StatusCache::new(CACHE_TTL),
+        cache: SnapshotCache::new(CACHE_TTL),
     })
 }
