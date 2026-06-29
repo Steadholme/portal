@@ -1,0 +1,238 @@
+/* ==========================================================================
+   HOLDFAST — Portal launcher design system
+   Shares the Keystone/Beacon brand tokens (gradient, indigo accent, status
+   colors) so the whole stack reads as one product. Embedded + inlined
+   server-side into the dashboard's <style>.
+   ========================================================================== */
+
+:root {
+  --brand-900: #0B1220;
+  --brand-800: #0F172A;
+  --brand-grad: linear-gradient(160deg, #0B1220 0%, #0F172A 55%, #15213b 100%);
+
+  --surface: #FFFFFF;
+  --surface-2: #F8FAFC;
+  --surface-3: #F1F5F9;
+  --text: #0F172A;
+  --text-muted: #475569;
+  --text-subtle: #64748B;
+
+  --accent: #4F46E5;
+  --accent-hover: #4338CA;
+  --accent-active: #3730A3;
+  --accent-ring: rgba(79, 70, 229, 0.35);
+  --accent-soft: #EEF2FF;
+
+  --success: #16A34A;
+  --success-soft: #F0FDF4;
+  --success-border: #BBF7D0;
+  --warning: #D97706;
+  --warning-soft: #FFFBEB;
+  --warning-border: #FDE68A;
+  --danger: #DC2626;
+  --danger-soft: #FEF2F2;
+  --danger-border: #FECACA;
+
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 18px 40px -12px rgba(15, 23, 42, 0.22);
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px;
+  --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-xs: 12px; --fs-sm: 13px; --fs-base: 14px; --fs-md: 15px;
+  --fs-lg: 18px; --fs-xl: 22px; --fs-2xl: 28px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+a { color: var(--accent); text-decoration: none; }
+.muted { color: var(--text-subtle); }
+
+/* ---- Brand lockup ------------------------------------------------------- */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  text-decoration: none;
+  color: inherit;
+}
+.brand:hover { text-decoration: none; }
+.brand__glyph { display: inline-flex; width: 30px; height: 30px; flex: none; }
+.brand__glyph svg { width: 100%; height: 100%; display: block; }
+.brand__word {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* ---- App bar ------------------------------------------------------------ */
+.page-console { background: var(--surface-2); }
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.topbar__inner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--sp-3) var(--sp-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+.topbar__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-subtle);
+  letter-spacing: 0.02em;
+}
+.topbar__right { display: flex; align-items: center; gap: var(--sp-4); }
+.user-email { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; }
+
+/* ---- Console layout ----------------------------------------------------- */
+.console { max-width: 1040px; margin: 0 auto; padding: var(--sp-10) var(--sp-6) var(--sp-12); }
+.console__head { margin-bottom: var(--sp-8); }
+.console__head h1 { margin: 0; font-size: var(--fs-2xl); font-weight: 700; letter-spacing: -0.01em; }
+.console__head .sub { margin: var(--sp-2) 0 0; color: var(--text-muted); font-size: var(--fs-md); }
+
+/* ---- Buttons ------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn:hover { text-decoration: none; }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border-strong); }
+.btn-ghost:hover { background: var(--surface-3); color: var(--text); }
+.btn-sm { padding: 6px 12px; font-size: var(--fs-sm); }
+
+/* ---- Status pills ------------------------------------------------------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill-ok { background: var(--success-soft); border-color: var(--success-border); color: var(--success); }
+.pill-warn { background: var(--warning-soft); border-color: var(--warning-border); color: var(--warning); }
+.pill-down { background: var(--danger-soft); border-color: var(--danger-border); color: var(--danger); }
+.pill-unknown { background: var(--surface-3); border-color: var(--border); color: var(--text-subtle); }
+.pill-soon { background: var(--accent-soft); border-color: #C7D2FE; color: var(--accent); }
+
+/* ---- Service tile grid -------------------------------------------------- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-5);
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.tile:hover {
+  text-decoration: none;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+.tile:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.tile__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.tile__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex: none;
+}
+.tile__icon svg { width: 22px; height: 22px; display: block; }
+.tile__name { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; }
+.tile__desc { color: var(--text-muted); font-size: var(--fs-sm); }
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) 0;
+  color: var(--text-subtle);
+  font-size: var(--fs-sm);
+}
+
+/* ---- Footer ------------------------------------------------------------- */
+.site-foot {
+  max-width: 1040px;
+  margin: var(--sp-8) auto 0;
+  padding: 0 var(--sp-6) var(--sp-8);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  color: var(--text-subtle);
+  font-size: var(--fs-xs);
+}
+
+@media (max-width: 640px) {
+  .topbar__title { display: none; }
+  .tiles { grid-template-columns: 1fr; }
+}
