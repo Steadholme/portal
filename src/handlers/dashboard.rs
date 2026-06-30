@@ -64,11 +64,35 @@ fn render(
         .replace("{{NAME}}", &esc(&name))
         .replace("{{EMAIL}}", &esc(email))
         .replace("{{HEALTH_CHIP}}", &health_chip(snap))
-        .replace("{{GREETING}}", &format!("{}, {}", greeting(hour), esc(&name)))
+        .replace("{{GREETING_WORD}}", greeting(hour))
         .replace("{{HERO_SUB}}", &hero_sub(snap))
+        .replace("{{SIDEBAR_NAV}}", &render_sidebar_nav(catalog))
         .replace("{{METRICS}}", &render_metrics(snap))
         .replace("{{SECTIONS}}", &render_sections(catalog, snap))
         .replace("{{ACTIVITY}}", &render_activity(&snap.events, now_secs))
+}
+
+/// The sidebar catalog nav: one item per non-empty category (in [`SECTION_ORDER`]), with an
+/// accent dot and a live app-count badge. The `data-spy` key matches the section element id so
+/// the client-side scroll-spy can highlight the active section.
+fn render_sidebar_nav(catalog: &[CatalogEntry]) -> String {
+    let mut out = String::new();
+    for (key, label) in SECTION_ORDER {
+        let count = catalog
+            .iter()
+            .filter(|e| category_key(&e.name) == *key)
+            .count();
+        if count == 0 {
+            continue;
+        }
+        out.push_str(&format!(
+            r##"<a class="nav__item" href="#{key}" data-spy="{key}"><span class="nav__dot nav__dot--{key}"></span><span class="nav__text">{label}</span><span class="nav__count">{count}</span></a>"##,
+            key = key,
+            label = esc(label),
+            count = count,
+        ));
+    }
+    out
 }
 
 /// The app-bar health chip: "N/M operational" tinted by whether everything is up. Degrades to
@@ -278,8 +302,10 @@ fn render_sections(catalog: &[CatalogEntry], snap: &Snapshot) -> String {
             continue;
         }
         out.push_str(&format!(
-            r#"<section class="appsec" data-section><h2 class="appsec__title">{label}</h2><div class="appgrid">"#,
+            r#"<section class="appsec appsec--{key}" id="{key}" data-section><h2 class="appsec__title"><span class="pip"></span><span class="nm">{label}</span><span class="ct">{count} apps</span><span class="ln"></span></h2><div class="appgrid">"#,
+            key = key,
             label = esc(label),
+            count = apps.len(),
         ));
         for entry in apps {
             out.push_str(&render_app(entry, key, snap));

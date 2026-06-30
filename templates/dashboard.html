@@ -4,102 +4,134 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>w33d · Apps</title>
+  <title>w33d · App Portal</title>
   <style>{{CSS}}</style>
 </head>
 <body>
-  <header class="appbar">
-    <div class="appbar__inner">
-      <a class="brand" href="/" aria-label="HOLDFAST home">
-        <span class="brand__glyph" aria-hidden="true">{{SHIELD}}</span>
-        <span class="brand__word">w33d<b>·</b>HOLDFAST</span>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Primary">
+      <a class="sidebar__brand" href="/" aria-label="HOLDFAST home">
+        <span class="sidebar__shield" aria-hidden="true">{{SHIELD}}</span>
+        <span class="sidebar__wordmark"><b>w33d</b><span>HOLDFAST</span></span>
       </a>
 
-      <div class="search" role="search">
-        <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="appsearch" type="search" placeholder="Search your apps" autocomplete="off" aria-label="Search your apps">
-      </div>
+      <nav class="sidebar__nav">
+        <a class="nav__item is-active" href="#top" data-spy="top">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span class="nav__text">Dashboard</span>
+        </a>
 
-      <div class="appbar__right">
-        {{HEALTH_CHIP}}
-        <div class="usermenu" id="usermenu">
-          <button class="usermenu__btn" id="usermenu-btn" aria-haspopup="true" aria-expanded="false">
-            <span class="avatar" aria-hidden="true">{{INITIAL}}</span>
-            <span class="usermenu__name">{{NAME}}</span>
-            <svg class="usermenu__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-          </button>
-          <div class="usermenu__pop" role="menu">
-            <div class="usermenu__id">
-              <div class="who">{{NAME}}</div>
-              <div class="mail">{{EMAIL}}</div>
-            </div>
-            <a class="usermenu__item" role="menuitem" href="https://id.w33d.xyz/account">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
-              Account &amp; passkeys
-            </a>
-            <a class="usermenu__item" role="menuitem" href="https://status.w33d.xyz">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
-              System status
-            </a>
-            <a class="usermenu__item danger" role="menuitem" href="https://id.w33d.xyz/_gw/auth/logout">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
-              Sign out
-            </a>
-          </div>
+        <p class="nav__label">Catalog</p>
+        {{SIDEBAR_NAV}}
+
+        <div class="nav__divider"></div>
+
+        <a class="nav__item" href="#sys" data-spy="sys">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
+          <span class="nav__text">System Health</span>
+        </a>
+        <a class="nav__item" href="#activity" data-spy="activity">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span class="nav__text">Activity</span>
+        </a>
+        <a class="nav__item" href="https://status.w33d.xyz" target="_blank" rel="noopener">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12a10 10 0 1 1-5-8.7"/><path d="m9 12 2 2 5-5"/></svg>
+          <span class="nav__text">Status page</span>
+          <svg class="nav__ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </a>
+      </nav>
+
+      <div class="sidebar__user">
+        <span class="avatar" aria-hidden="true">{{INITIAL}}</span>
+        <span class="sidebar__who">
+          <span class="sidebar__name">{{NAME}}</span>
+          <span class="sidebar__mail">{{EMAIL}}</span>
+        </span>
+        <a class="sidebar__out" href="https://id.w33d.xyz/_gw/auth/logout" title="Sign out" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
+        </a>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="topbar__burger" id="burger" aria-label="Toggle menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="topbar__title">
+          <strong>App Portal</strong>
+          <span>Dashboard</span>
         </div>
+        <div class="search" role="search">
+          <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="appsearch" type="search" placeholder="Search your apps" autocomplete="off" aria-label="Search your apps">
+          <kbd class="search__kbd">/</kbd>
+        </div>
+        <div class="topbar__right">
+          {{HEALTH_CHIP}}
+          <a class="iconbtn" href="https://notify.w33d.xyz" title="Notifications" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          </a>
+        </div>
+      </header>
+
+      <div class="content" id="top">
+        <div class="pagehead">
+          <p class="kicker">Sovereign Cloud Console</p>
+          <h1>{{GREETING_WORD}}, <span class="grad">{{NAME}}</span></h1>
+          <p class="lede">{{HERO_SUB}}</p>
+        </div>
+
+        <div id="appsections">
+          {{SECTIONS}}
+        </div>
+        <div class="noresults" id="noresults">No apps match your search.</div>
+
+        <section class="sys" id="sys" aria-label="System health">
+          <div class="sys__head">
+            <h2>System health</h2>
+            <span class="hint">Live from Beacon · Vitals · Watchtower</span>
+          </div>
+          <div class="metrics">{{METRICS}}</div>
+        </section>
+
+        <section class="sys" id="activity" aria-label="Recent activity">
+          <div class="sys__head">
+            <h2>Recent activity</h2>
+            <span class="hint">Tamper-evident audit trail</span>
+          </div>
+          <div class="feedcard">{{ACTIVITY}}</div>
+        </section>
+
+        <footer class="site-foot">
+          <span>HOLDFAST · Sovereign infrastructure</span>
+          <span>One sign-on across every service.</span>
+        </footer>
       </div>
     </div>
-  </header>
-
-  <main class="wrap">
-    <div class="pagehead">
-      <h1>{{GREETING}}</h1>
-      <p>{{HERO_SUB}}</p>
-    </div>
-
-    <div id="appsections">
-      {{SECTIONS}}
-    </div>
-    <div class="noresults" id="noresults">No apps match your search.</div>
-
-    <section class="sys" aria-label="System health">
-      <div class="sys__head">
-        <h2>System health</h2>
-        <span class="hint">Live from Beacon · Vitals · Watchtower</span>
-      </div>
-      <div class="sys__grid">
-        <div class="metrics">{{METRICS}}</div>
-        <div class="feedcard">{{ACTIVITY}}</div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-foot">
-    <span>HOLDFAST · Sovereign infrastructure</span>
-    <span>One sign-on across every service.</span>
-  </footer>
+  </div>
+  <div class="scrim" id="scrim" hidden></div>
 
   <script>
   (function () {
-    // User menu toggle (click to open, outside-click / Esc to close).
-    var um = document.getElementById('usermenu'),
-        ub = document.getElementById('usermenu-btn');
-    if (ub) {
-      ub.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var open = um.classList.toggle('open');
-        ub.setAttribute('aria-expanded', open ? 'true' : 'false');
-      });
-      document.addEventListener('click', function () { um.classList.remove('open'); ub.setAttribute('aria-expanded', 'false'); });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { um.classList.remove('open'); ub.setAttribute('aria-expanded', 'false'); } });
+    var sidebar = document.getElementById('sidebar'),
+        burger = document.getElementById('burger'),
+        scrim = document.getElementById('scrim');
+    function setMenu(open) {
+      document.body.classList.toggle('nav-open', open);
+      scrim.hidden = !open;
+      if (burger) burger.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
-    // Live app search: filter chiclets by name+description, hide empty sections.
+    if (burger) burger.addEventListener('click', function () { setMenu(!document.body.classList.contains('nav-open')); });
+    if (scrim) scrim.addEventListener('click', function () { setMenu(false); });
+
+    // Search: filter app cards by name+description, hide emptied sections.
     var box = document.getElementById('appsearch'),
-        sections = document.querySelectorAll('#appsections [data-section]'),
+        sections = function () { return document.querySelectorAll('#appsections [data-section]'); },
         none = document.getElementById('noresults');
-    function apply() {
+    function applySearch() {
       var q = (box.value || '').trim().toLowerCase(), anyVisible = false;
-      sections.forEach(function (sec) {
+      sections().forEach(function (sec) {
         var shown = 0;
         sec.querySelectorAll('.app').forEach(function (a) {
           var hit = !q || (a.getAttribute('data-name') || '').indexOf(q) !== -1;
@@ -112,8 +144,31 @@
       none.classList.toggle('show', !anyVisible);
     }
     if (box) {
-      box.addEventListener('input', apply);
-      box.addEventListener('keydown', function (e) { if (e.key === 'Escape') { box.value = ''; apply(); } });
+      box.addEventListener('input', applySearch);
+      box.addEventListener('keydown', function (e) { if (e.key === 'Escape') { box.value = ''; applySearch(); box.blur(); } });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === '/' && document.activeElement !== box) { e.preventDefault(); box.focus(); }
+      });
+    }
+
+    // Nav: smooth scroll + scroll-spy active state.
+    var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav__item[data-spy]'));
+    function setActive(id) {
+      navItems.forEach(function (n) { n.classList.toggle('is-active', n.getAttribute('data-spy') === id); });
+    }
+    navItems.forEach(function (n) {
+      n.addEventListener('click', function (e) {
+        var id = n.getAttribute('data-spy'), el = document.getElementById(id);
+        if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActive(id); setMenu(false); }
+      });
+    });
+    var spied = navItems.map(function (n) { return n.getAttribute('data-spy'); });
+    var targets = spied.map(function (id) { return document.getElementById(id); }).filter(Boolean);
+    if ('IntersectionObserver' in window && targets.length) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { if (en.isIntersecting) setActive(en.target.id); });
+      }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+      targets.forEach(function (t) { io.observe(t); });
     }
   })();
   </script>
