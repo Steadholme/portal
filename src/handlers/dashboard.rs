@@ -280,9 +280,10 @@ fn category_key(name: &str) -> &'static str {
         "Mail" | "Chat" | "Notify" | "Inbox" | "Calendar" | "Feeds" | "Clips" | "Social" => {
             "comms"
         }
-        "Status" | "Vitals" | "Sift" | "RCA" => "obs",
-        "Relay" | "Grimoire" | "Familiar" => "ai",
-        "Git" | "Registry" | "Events" | "Jobs" | "Backup" | "Lodestar" | "DNS" => "dev",
+        "Status" | "Vitals" | "Sift" | "RCA" | "Filament" | "Augur" => "obs",
+        "Relay" | "Grimoire" | "Familiar" | "Warden" | "Cascade" => "ai",
+        "Git" | "Registry" | "Events" | "Jobs" | "Backup" | "Lodestar" | "DNS" | "Ripple"
+        | "Eddy" | "Anvil" | "Atlas" => "dev",
         _ => "more",
     }
 }
