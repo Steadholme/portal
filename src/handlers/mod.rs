@@ -108,6 +108,13 @@ pub fn icon_svg(key: &str) -> &'static str {
         "guard" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>"##,
         "augur" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 3 3 5-6 5 5"/><path d="M16 9h4v4"/></svg>"##,
         "flows" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="4" rx="1"/><rect x="15" y="9" width="6" height="4" rx="1"/><rect x="3" y="16" width="6" height="4" rx="1"/><path d="M9 6h3a2 2 0 0 1 2 2v1M9 18h3a2 2 0 0 0 2-2v-1"/></svg>"##,
+        "mesh" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="18" r="2.2"/><circle cx="19" cy="18" r="2.2"/><path d="M12 7v3M10.5 6.5 6.5 16M13.5 6.5 17.5 16M7 18h10"/></svg>"##,
+        "pulse" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-7 4 14 2-7h8"/></svg>"##,
+        "sigil" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><circle cx="12" cy="10" r="2"/><path d="M12 12v4"/></svg>"##,
+        "crucible" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7.5 15h9"/></svg>"##,
+        "skiff" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15h18l-2 4a2 2 0 0 1-1.8 1H6.8A2 2 0 0 1 5 19l-2-4Z"/><path d="M12 15V4l6 4-6 3"/></svg>"##,
+        "estuary" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11M3 12h7M3 17h11"/><path d="m17 4 4 4-4 4M21 8H10"/></svg>"##,
+        "phantom" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V9a7 7 0 0 1 14 0v12l-3-2-2 2-2-2-2 2-3-2Z"/><path d="M9 10h.01M15 10h.01"/></svg>"##,
         _ => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>"##,
     }
 }
@@ -164,6 +171,13 @@ pub fn icon_for(name: &str, icon_key: &str) -> &'static str {
         "Warden" => "guard",
         "Augur" => "augur",
         "Cascade" => "flows",
+        "Mycelium" => "mesh",
+        "Pulse" => "pulse",
+        "Sigil" => "sigil",
+        "Crucible" => "crucible",
+        "Skiff" => "skiff",
+        "Estuary" => "estuary",
+        "Phantom" => "phantom",
         _ => "",
     };
     icon_svg(key)

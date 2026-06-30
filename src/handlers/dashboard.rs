@@ -273,7 +273,7 @@ const SECTION_ORDER: &[(&str, &str)] = &[
 fn category_key(name: &str) -> &'static str {
     match name {
         "Identity" | "Audit" | "Vault" | "Threat Intel" | "Intel" | "Canary" | "Authz"
-        | "People" => "ident",
+        | "People" | "Pulse" | "Sigil" | "Crucible" | "Phantom" => "ident",
         "Blog" | "Forum" | "Wiki" | "Pastefire" | "Paste" | "Search" | "Drive" | "Comments" => {
             "content"
         }
@@ -283,7 +283,7 @@ fn category_key(name: &str) -> &'static str {
         "Status" | "Vitals" | "Sift" | "RCA" | "Filament" | "Augur" => "obs",
         "Relay" | "Grimoire" | "Familiar" | "Warden" | "Cascade" => "ai",
         "Git" | "Registry" | "Events" | "Jobs" | "Backup" | "Lodestar" | "DNS" | "Ripple"
-        | "Eddy" | "Anvil" | "Atlas" => "dev",
+        | "Eddy" | "Anvil" | "Atlas" | "Mycelium" | "Skiff" | "Estuary" => "dev",
         _ => "more",
     }
 }
