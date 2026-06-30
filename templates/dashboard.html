@@ -4,66 +4,118 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>HOLDFAST · Command Center</title>
+  <title>w33d · Apps</title>
   <style>{{CSS}}</style>
 </head>
-<body class="page-console">
-  <header class="topbar">
-    <div class="topbar__inner">
+<body>
+  <header class="appbar">
+    <div class="appbar__inner">
       <a class="brand" href="/" aria-label="HOLDFAST home">
         <span class="brand__glyph" aria-hidden="true">{{SHIELD}}</span>
-        <span class="brand__word">HOLDFAST</span>
-        <span class="brand__tag">Command Center</span>
+        <span class="brand__word">w33d<b>·</b>HOLDFAST</span>
       </a>
-      <div class="topbar__right">
-        <span class="user" title="{{EMAIL}}">
-          <span class="user__avatar" aria-hidden="true">{{INITIAL}}</span>
-          <span class="user__email">{{EMAIL}}</span>
-        </span>
-        <a class="btn btn-ghost btn-sm" href="https://id.w33d.xyz/_gw/auth/logout">Log out</a>
+
+      <div class="search" role="search">
+        <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="appsearch" type="search" placeholder="Search your apps" autocomplete="off" aria-label="Search your apps">
+      </div>
+
+      <div class="appbar__right">
+        {{HEALTH_CHIP}}
+        <div class="usermenu" id="usermenu">
+          <button class="usermenu__btn" id="usermenu-btn" aria-haspopup="true" aria-expanded="false">
+            <span class="avatar" aria-hidden="true">{{INITIAL}}</span>
+            <span class="usermenu__name">{{NAME}}</span>
+            <svg class="usermenu__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="usermenu__pop" role="menu">
+            <div class="usermenu__id">
+              <div class="who">{{NAME}}</div>
+              <div class="mail">{{EMAIL}}</div>
+            </div>
+            <a class="usermenu__item" role="menuitem" href="https://id.w33d.xyz/account">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+              Account &amp; passkeys
+            </a>
+            <a class="usermenu__item" role="menuitem" href="https://status.w33d.xyz">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
+              System status
+            </a>
+            <a class="usermenu__item danger" role="menuitem" href="https://id.w33d.xyz/_gw/auth/logout">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
+              Sign out
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   </header>
 
-  <section class="hero">
-    <div class="hero__inner">
-      <p class="hero__eyebrow">Sovereign Cloud · Operations</p>
-      <h1 class="hero__title">{{GREETING}}</h1>
-      <p class="hero__sub">{{HERO_SUB}}</p>
+  <main class="wrap">
+    <div class="pagehead">
+      <h1>{{GREETING}}</h1>
+      <p>{{HERO_SUB}}</p>
     </div>
-  </section>
 
-  <main class="console">
-    <section class="metrics" aria-label="Live metrics">
-      {{METRICS}}
+    <div id="appsections">
+      {{SECTIONS}}
+    </div>
+    <div class="noresults" id="noresults">No apps match your search.</div>
+
+    <section class="sys" aria-label="System health">
+      <div class="sys__head">
+        <h2>System health</h2>
+        <span class="hint">Live from Beacon · Vitals · Watchtower</span>
+      </div>
+      <div class="sys__grid">
+        <div class="metrics">{{METRICS}}</div>
+        <div class="feedcard">{{ACTIVITY}}</div>
+      </div>
     </section>
-
-    <div class="grid">
-      <section class="panel panel--services">
-        <div class="panel__head">
-          <h2 class="panel__title">Services</h2>
-          <span class="panel__hint">Live status from Beacon</span>
-        </div>
-        <div class="tiles">
-          {{TILES}}
-        </div>
-      </section>
-
-      <aside class="panel panel--activity">
-        <div class="panel__head">
-          <h2 class="panel__title">Recent activity</h2>
-          <span class="panel__hint">Audit trail</span>
-        </div>
-        <div class="feed">
-          {{ACTIVITY}}
-        </div>
-      </aside>
-    </div>
   </main>
 
   <footer class="site-foot">
     <span>HOLDFAST · Sovereign infrastructure</span>
     <span>One sign-on across every service.</span>
   </footer>
+
+  <script>
+  (function () {
+    // User menu toggle (click to open, outside-click / Esc to close).
+    var um = document.getElementById('usermenu'),
+        ub = document.getElementById('usermenu-btn');
+    if (ub) {
+      ub.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = um.classList.toggle('open');
+        ub.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      document.addEventListener('click', function () { um.classList.remove('open'); ub.setAttribute('aria-expanded', 'false'); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { um.classList.remove('open'); ub.setAttribute('aria-expanded', 'false'); } });
+    }
+    // Live app search: filter chiclets by name+description, hide empty sections.
+    var box = document.getElementById('appsearch'),
+        sections = document.querySelectorAll('#appsections [data-section]'),
+        none = document.getElementById('noresults');
+    function apply() {
+      var q = (box.value || '').trim().toLowerCase(), anyVisible = false;
+      sections.forEach(function (sec) {
+        var shown = 0;
+        sec.querySelectorAll('.app').forEach(function (a) {
+          var hit = !q || (a.getAttribute('data-name') || '').indexOf(q) !== -1;
+          a.style.display = hit ? '' : 'none';
+          if (hit) shown++;
+        });
+        sec.style.display = shown ? '' : 'none';
+        if (shown) anyVisible = true;
+      });
+      none.classList.toggle('show', !anyVisible);
+    }
+    if (box) {
+      box.addEventListener('input', apply);
+      box.addEventListener('keydown', function (e) { if (e.key === 'Escape') { box.value = ''; apply(); } });
+    }
+  })();
+  </script>
 </body>
 </html>

@@ -19,8 +19,8 @@ use axum::response::Html;
 use crate::auth;
 use crate::catalog::CatalogEntry;
 use crate::handlers::{
-    coming_soon_pill, esc, fmt_pct, greeting, icon_svg, name_from_email, pct_width, rel_time,
-    severity_dot_class, status_pill, APP_CSS, SHIELD_SVG,
+    esc, fmt_pct, greeting, icon_for, name_from_email, pct_width, rel_time, severity_dot_class,
+    status_label, status_pill_class, APP_CSS, SHIELD_SVG,
 };
 use crate::snapshot::Snapshot;
 use crate::watchtower::{Event, Verify};
@@ -61,12 +61,31 @@ fn render(
         .replace("{{CSS}}", APP_CSS)
         .replace("{{SHIELD}}", SHIELD_SVG)
         .replace("{{INITIAL}}", &esc(&initial))
+        .replace("{{NAME}}", &esc(&name))
         .replace("{{EMAIL}}", &esc(email))
+        .replace("{{HEALTH_CHIP}}", &health_chip(snap))
         .replace("{{GREETING}}", &format!("{}, {}", greeting(hour), esc(&name)))
         .replace("{{HERO_SUB}}", &hero_sub(snap))
         .replace("{{METRICS}}", &render_metrics(snap))
-        .replace("{{TILES}}", &render_tiles(catalog, snap))
+        .replace("{{SECTIONS}}", &render_sections(catalog, snap))
         .replace("{{ACTIVITY}}", &render_activity(&snap.events, now_secs))
+}
+
+/// The app-bar health chip: "N/M operational" tinted by whether everything is up. Degrades to
+/// a neutral "status syncing" label until Beacon first reports.
+fn health_chip(snap: &Snapshot) -> String {
+    let s = &snap.statuses;
+    if s.reached && s.total > 0 {
+        let cls = if s.up == s.total { "is-ok" } else { "is-warn" };
+        format!(
+            r#"<span class="healthchip {cls}"><span class="dot"></span>{up}/{total} operational</span>"#,
+            cls = cls,
+            up = s.up,
+            total = s.total,
+        )
+    } else {
+        r#"<span class="healthchip"><span class="dot"></span>status syncing</span>"#.to_string()
+    }
 }
 
 /// One-line live summary under the greeting.
@@ -211,40 +230,102 @@ fn pct_width_opt(v: f64) -> f64 {
     pct_width(Some(v))
 }
 
-// --- Service tiles ---------------------------------------------------------------------
+// --- App chiclets, grouped into Okta-style sections ------------------------------------
 
-/// Render the responsive grid of service cards with live status pills.
-fn render_tiles(catalog: &[CatalogEntry], snap: &Snapshot) -> String {
+/// The fixed section order + display label. A catalog entry is placed by [`category_key`];
+/// the section is rendered only when at least one app falls in it.
+const SECTION_ORDER: &[(&str, &str)] = &[
+    ("ident", "Identity & Security"),
+    ("content", "Content & Knowledge"),
+    ("comms", "Communication"),
+    ("obs", "Observability"),
+    ("ai", "AI & Assistants"),
+    ("dev", "Developer & Platform"),
+    ("more", "More"),
+];
+
+/// Map a tile's display name to its section key. Unknown names land in "more" so a newly
+/// added service still renders cleanly without a code change.
+fn category_key(name: &str) -> &'static str {
+    match name {
+        "Identity" | "Audit" | "Vault" | "Threat Intel" | "Intel" | "Canary" | "Authz"
+        | "People" => "ident",
+        "Blog" | "Forum" | "Wiki" | "Pastefire" | "Paste" | "Search" | "Drive" | "Comments" => {
+            "content"
+        }
+        "Mail" | "Chat" | "Notify" | "Inbox" | "Calendar" | "Feeds" | "Clips" | "Social" => {
+            "comms"
+        }
+        "Status" | "Vitals" | "Sift" | "RCA" => "obs",
+        "Relay" | "Grimoire" | "Familiar" => "ai",
+        "Git" | "Registry" | "Events" | "Jobs" | "Backup" | "Lodestar" | "DNS" => "dev",
+        _ => "more",
+    }
+}
+
+/// Render the app chiclets grouped into the fixed sections (Okta end-user dashboard layout).
+fn render_sections(catalog: &[CatalogEntry], snap: &Snapshot) -> String {
     if catalog.is_empty() {
-        return r#"<div class="empty">No services are configured.</div>"#.to_string();
+        return r#"<div class="empty">No apps are configured.</div>"#.to_string();
     }
-    let mut tiles = String::new();
-    for entry in catalog {
-        // Coming-soon tiles show a tag instead of a live pill; live tiles map their Beacon
-        // component name to a status (defaulting to "unknown" when Beacon doesn't report it).
-        let pill = if entry.coming_soon {
-            coming_soon_pill()
-        } else {
-            status_pill(snap.statuses.status_of(&entry.component))
-        };
-        tiles.push_str(&format!(
-            r#"<a class="tile" href="{url}">
-  <div class="tile__top">
-    <span class="tile__icon" aria-hidden="true">{icon}</span>
-    {pill}
-  </div>
-  <div class="tile__name">{name}</div>
-  <div class="tile__desc">{desc}</div>
-  <span class="tile__go" aria-hidden="true">Open &rarr;</span>
-</a>"#,
-            url = esc(&entry.url),
-            icon = icon_svg(&entry.icon),
-            pill = pill,
-            name = esc(&entry.name),
-            desc = esc(&entry.description),
+    let mut out = String::new();
+    for (key, label) in SECTION_ORDER {
+        let apps: Vec<&CatalogEntry> = catalog
+            .iter()
+            .filter(|e| category_key(&e.name) == *key)
+            .collect();
+        if apps.is_empty() {
+            continue;
+        }
+        out.push_str(&format!(
+            r#"<section class="appsec" data-section><h2 class="appsec__title">{label}</h2><div class="appgrid">"#,
+            label = esc(label),
         ));
+        for entry in apps {
+            out.push_str(&render_app(entry, key, snap));
+        }
+        out.push_str("</div></section>");
     }
-    tiles
+    out
+}
+
+/// One app chiclet: a category-tinted icon tile, the app name + description, and a live status
+/// dot (top-right). Coming-soon services show a "Soon" badge and an accent dot.
+fn render_app(entry: &CatalogEntry, cat_key: &str, snap: &Snapshot) -> String {
+    let (dot_class, title, soon_badge) = if entry.coming_soon {
+        (
+            "pill-soon".to_string(),
+            "Coming soon".to_string(),
+            r#"<span class="app__soon">Soon</span>"#.to_string(),
+        )
+    } else {
+        let status = snap.statuses.status_of(&entry.component);
+        (
+            status_pill_class(status).to_string(),
+            status_label(status).to_string(),
+            String::new(),
+        )
+    };
+    // Lowercased name+description backs the client-side app search filter.
+    let data_name = esc(&format!("{} {}", entry.name, entry.description).to_lowercase());
+    format!(
+        r#"<a class="app app--{cat}" href="{url}" data-name="{dn}">
+  {soon}
+  <span class="app__status {dot}" title="{title}" aria-label="{title}"></span>
+  <span class="app__icon" aria-hidden="true">{icon}</span>
+  <span class="app__name">{name}</span>
+  <span class="app__desc">{desc}</span>
+</a>"#,
+        cat = cat_key,
+        url = esc(&entry.url),
+        dn = data_name,
+        soon = soon_badge,
+        dot = dot_class,
+        title = esc(&title),
+        icon = icon_for(&entry.name, &entry.icon),
+        name = esc(&entry.name),
+        desc = esc(&entry.description),
+    )
 }
 
 // --- Recent activity feed --------------------------------------------------------------

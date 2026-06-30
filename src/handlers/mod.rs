@@ -74,8 +74,83 @@ pub fn icon_svg(key: &str) -> &'static str {
         "forum" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10h8M8 14h5"/><path d="M21 12a7 7 0 0 1-7 7H8l-4 3v-4.3A7 7 0 0 1 8 5h6a7 7 0 0 1 7 7Z"/></svg>"##,
         "wiki" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h6v18H6a2 2 0 0 0-2 2V5Z"/><path d="M20 5a2 2 0 0 0-2-2h-6v18h6a2 2 0 0 1 2 2V5Z"/></svg>"##,
         "paste" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2"/><path d="m9 13 2 2 4-4"/></svg>"##,
+        "vault" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="12" r="3.5"/><path d="M12 12h5"/></svg>"##,
+        "intel" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="M12 8v4M12 16h.01"/></svg>"##,
+        "canary" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7a3 3 0 1 0-3-3"/><path d="M13 4 4 13l3 3 5-1 4-4a4 4 0 0 0 0-6Z"/><path d="m9 16-2 4"/></svg>"##,
+        "drive" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 19a4 4 0 0 1-.9-7.9A5 5 0 0 1 15 9a4 4 0 0 1 1 7.9"/><path d="M12 12v6M9 15l3-3 3 3"/></svg>"##,
+        "search" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>"##,
+        "calendar" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>"##,
+        "rss" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5"/></svg>"##,
+        "clip" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7v10a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v9.5a1 1 0 0 1-2 0V7"/></svg>"##,
+        "chat" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-4.5A8 8 0 0 1 13 4a8 8 0 0 1 8 8Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg>"##,
+        "bell" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>"##,
+        "inbox" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h5l2 3h4l2-3h5"/><path d="M5 5h14l2 7v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5L5 5Z"/></svg>"##,
+        "logs" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 10h10M4 14h16M4 18h7"/></svg>"##,
+        "ai" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M5 12H3M21 12h-2"/><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M10 10h.01M14 10h.01M9.5 14h5"/></svg>"##,
+        "rag" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M14 4v5h5"/><path d="m9 13 2 2 3-3"/></svg>"##,
+        "assistant" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M9 13h.01M15 13h.01"/><path d="M2 12v2M22 12v2"/></svg>"##,
+        "git" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="17" cy="9" r="2.5"/><path d="M6 8.5v7M17 11.5c0 3-4 2.5-8 4"/></svg>"##,
+        "registry" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg>"##,
+        "dns" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z"/></svg>"##,
+        "comments" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10h8M8 13h5"/><path d="M21 11.5a7.5 7.5 0 0 1-11 6.6L3 20l1.9-4.3A7.5 7.5 0 1 1 21 11.5Z"/></svg>"##,
+        "people" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1"/><path d="M16 4a3 3 0 0 1 0 6M18.5 20v-1a4.5 4.5 0 0 0-3-4.2"/></svg>"##,
+        "authz" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9 1 3 2 1-3 3-3-1-3 3"/></svg>"##,
+        "events" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8c4 0 4 8 8 8s4-8 8-8M3 16c4 0 4-8 8-8"/></svg>"##,
+        "jobs" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>"##,
+        "backup" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>"##,
+        "rca" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 7 4-14 2 7h6"/><circle cx="12" cy="12" r="9" opacity="0"/></svg>"##,
+        "social" => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-7-4 18-5-6-9-5Z"/><path d="m12 16-1 4 3-3"/></svg>"##,
         _ => r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>"##,
     }
+}
+
+/// Resolve a tile's icon: prefer its explicit `icon` key, else derive a sensible glyph from
+/// the display name. Lets the apex render distinct per-app icons without every `PORTAL_CATALOG`
+/// entry carrying an `icon` field.
+pub fn icon_for(name: &str, icon_key: &str) -> &'static str {
+    if !icon_key.is_empty() {
+        // A non-generic explicit key wins; an empty key falls through to the name map.
+        return icon_svg(icon_key);
+    }
+    let key = match name {
+        "Identity" => "identity",
+        "Audit" => "audit",
+        "Vault" => "vault",
+        "Threat Intel" | "Intel" => "intel",
+        "Canary" => "canary",
+        "Authz" => "authz",
+        "People" => "people",
+        "Blog" => "blog",
+        "Forum" => "forum",
+        "Wiki" => "wiki",
+        "Pastefire" | "Paste" => "paste",
+        "Drive" => "drive",
+        "Search" => "search",
+        "Comments" => "comments",
+        "Mail" => "mail",
+        "Chat" => "chat",
+        "Notify" => "bell",
+        "Inbox" => "inbox",
+        "Calendar" => "calendar",
+        "Feeds" => "rss",
+        "Clips" => "clip",
+        "Social" => "social",
+        "Status" => "status",
+        "Vitals" => "vitals",
+        "Sift" => "logs",
+        "RCA" => "rca",
+        "Relay" => "ai",
+        "Grimoire" => "rag",
+        "Familiar" => "assistant",
+        "Git" => "git",
+        "Registry" => "registry",
+        "Events" => "events",
+        "Jobs" => "jobs",
+        "Backup" => "backup",
+        "Lodestar" | "DNS" => "dns",
+        _ => "",
+    };
+    icon_svg(key)
 }
 
 /// Time-of-day greeting from a 0..=23 hour. Kept pure so the handler computes the hour and
