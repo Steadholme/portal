@@ -19,9 +19,10 @@ use crate::http;
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2);
 /// How many recent events the dashboard activity feed shows.
 pub const FEED_LEN: usize = 8;
-/// How many recent events the operator console's cross-service AUDIT viewer loads (the
-/// client then filters + progressively reveals them). Bounded so the payload stays small.
-pub const AUDIT_MAX: usize = 200;
+/// How many recent events the operator console's cross-service AUDIT viewer fetches (the
+/// ops handler then filters + paginates them server-side). Matches Watchtower's own per-query
+/// row cap (`QUERY_LIMIT = 500`), so one fetch sees everything one Watchtower query returns.
+pub const AUDIT_MAX: usize = 500;
 
 /// `/api/verify` response we care about: the chain length, integrity flag + head hash.
 #[derive(Debug, Default, Deserialize)]
@@ -38,10 +39,15 @@ pub struct Verify {
     pub reached: bool,
 }
 
-/// One sealed audit event (the fields the activity feed + audit viewer render; chain hashes are
-/// ignored). `ts` is epoch MILLISECONDS (Watchtower stamps appends with `now_ms`).
+/// One sealed audit event. The activity feed renders the headline fields; the operator
+/// console's per-event detail expander additionally shows the full sealed metadata (`seq`,
+/// `detail`, chain hashes). `ts` is epoch MILLISECONDS (Watchtower stamps appends with
+/// `now_ms`). Every field defaults so a foreign/older payload still parses.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Event {
+    /// Chain sequence number (monotonic from 1). Absent on foreign payloads -> 0.
+    #[serde(default)]
+    pub seq: i64,
     #[serde(default)]
     pub ts: i64,
     /// Emitting service (the audit viewer filters by it). Absent on older events -> "".
@@ -55,6 +61,15 @@ pub struct Event {
     pub target: String,
     #[serde(default)]
     pub severity: String,
+    /// Free-text payload (shown only in the ops detail expander, escaped).
+    #[serde(default)]
+    pub detail: String,
+    /// Chain link: the previous event's hash (genesis for the first event).
+    #[serde(default)]
+    pub prev_hash: String,
+    /// The committed hash sealing this event into the chain.
+    #[serde(default)]
+    pub hash: String,
 }
 
 /// Fetch the chain integrity summary. On ANY failure returns the default (not reached).
@@ -77,12 +92,26 @@ pub async fn fetch_events(watchtower_url: &str) -> Vec<Event> {
 }
 
 /// Fetch the cross-service audit stream for the operator console (newest-first), truncated to
-/// [`AUDIT_MAX`]. On ANY failure returns an empty list — the console degrades, never errors.
-pub async fn fetch_audit(watchtower_url: &str) -> Vec<Event> {
-    let url = format!("{}/api/events", watchtower_url.trim_end_matches('/'));
+/// [`AUDIT_MAX`]. `since_ms` (epoch ms) is PUSHED DOWN as Watchtower's native `?since=` param.
+/// The console's other filters (source / actor / action SUBSTRING matches + an upper time
+/// bound) have NO Watchtower query-param equivalent — its `actor`/`action` params are exact
+/// matches and there is no `until` — so the ops handler applies those over this fetched
+/// window instead. On ANY failure returns an empty list — the console degrades, never errors.
+pub async fn fetch_audit(watchtower_url: &str, since_ms: Option<i64>) -> Vec<Event> {
+    let url = audit_url(watchtower_url, since_ms);
     match http::fetch_text(&url, FETCH_TIMEOUT).await {
         Some(body) => parse_events_capped(&body, AUDIT_MAX),
         None => Vec::new(),
+    }
+}
+
+/// Build the ops-console `/api/events` URL, appending the native `?since=` filter when a lower
+/// time bound is known. Kept pure so the push-down is unit-testable.
+pub fn audit_url(watchtower_url: &str, since_ms: Option<i64>) -> String {
+    let base = format!("{}/api/events", watchtower_url.trim_end_matches('/'));
+    match since_ms {
+        Some(ms) => format!("{base}?since={ms}"),
+        None => base,
     }
 }
 
@@ -169,6 +198,33 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].source, "keystone");
         assert_eq!(events[0].actor, "alice");
+    }
+
+    #[test]
+    fn parse_events_reads_full_sealed_metadata_for_detail_expander() {
+        let events = parse_events(
+            r#"[{"seq":9,"ts":1700000000000,"source":"relay","actor":"bob","action":"key.revoke","target":"sk","severity":"warning","detail":"revoked by admin","prev_hash":"aa11","hash":"bb22"}]"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].seq, 9);
+        assert_eq!(events[0].detail, "revoked by admin");
+        assert_eq!(events[0].prev_hash, "aa11");
+        assert_eq!(events[0].hash, "bb22");
+
+        // Sparse payloads (older events / foreign shape) still parse, defaulting everything.
+        let sparse = parse_events(r#"[{"ts":1,"action":"a"}]"#);
+        assert_eq!(sparse[0].seq, 0);
+        assert!(sparse[0].detail.is_empty());
+        assert!(sparse[0].hash.is_empty());
+    }
+
+    #[test]
+    fn audit_url_pushes_since_down_as_query_param() {
+        assert_eq!(audit_url("http://wt:8500", None), "http://wt:8500/api/events");
+        assert_eq!(
+            audit_url("http://wt:8500/", Some(1_700_000_000_000)),
+            "http://wt:8500/api/events?since=1700000000000"
+        );
     }
 
     #[test]

@@ -71,28 +71,18 @@
             <h2>Cross-service audit</h2>
             <span class="hint">{{AUDIT_SUMMARY}}</span>
           </div>
-          <div class="ops-filters">
-            <input id="auditq" class="ops-input" type="search" placeholder="Filter by source, actor, action or target…" autocomplete="off" aria-label="Filter audit events">
-            <select id="auditsev" class="ops-select" aria-label="Filter by severity">
-              <option value="">All severities</option>
-              <option value="critical">Critical</option>
-              <option value="error">Error</option>
-              <option value="warning">Warning</option>
-              <option value="info">Info</option>
-            </select>
-          </div>
+          {{AUDIT_FILTERS}}
           <div class="ops-tablewrap">
             <table class="ops-table" id="audittable">
               <thead>
-                <tr><th>When</th><th>Severity</th><th>Source</th><th>Actor</th><th>Action</th><th>Target</th></tr>
+                <tr><th>When</th><th>Severity</th><th>Source</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr>
               </thead>
               <tbody id="auditbody">
                 {{AUDIT_ROWS}}
               </tbody>
             </table>
           </div>
-          <div class="ops-note" id="auditnone" hidden>No audit events match your filter.</div>
-          <div class="ops-more"><button type="button" class="loadmore" id="auditmore">Load more</button></div>
+          <div class="ops-pager">{{AUDIT_PAGER}}</div>
         </section>
 
         <section class="sys" id="health" aria-label="Service health">
@@ -142,38 +132,7 @@
     if (burger) burger.addEventListener('click', function () { setMenu(!document.body.classList.contains('nav-open')); });
     if (scrim) scrim.addEventListener('click', function () { setMenu(false); });
 
-    // Audit viewer: client-side filter (free-text + severity) with progressive "load more".
-    var PAGE = 25;
-    var rows = Array.prototype.slice.call(document.querySelectorAll('#auditbody .au-row'));
-    var q = document.getElementById('auditq'),
-        sev = document.getElementById('auditsev'),
-        more = document.getElementById('auditmore'),
-        none = document.getElementById('auditnone'),
-        shown = PAGE;
-    function apply() {
-      var qs = (q.value || '').trim().toLowerCase(),
-          sv = sev.value,
-          matches = 0, visible = 0;
-      rows.forEach(function (r) {
-        var hit = (!qs || (r.getAttribute('data-f') || '').indexOf(qs) !== -1) &&
-                  (!sv || r.getAttribute('data-sev') === sv);
-        if (hit) {
-          matches++;
-          if (visible < shown) { r.style.display = ''; visible++; }
-          else { r.style.display = 'none'; }
-        } else { r.style.display = 'none'; }
-      });
-      if (none) none.hidden = matches !== 0 || rows.length === 0;
-      if (more) more.style.display = (visible < matches) ? '' : 'none';
-    }
-    if (rows.length) {
-      if (q) q.addEventListener('input', function () { shown = PAGE; apply(); });
-      if (sev) sev.addEventListener('change', function () { shown = PAGE; apply(); });
-      if (more) more.addEventListener('click', function () { shown += PAGE; apply(); });
-      apply();
-    } else if (more) {
-      more.style.display = 'none';
-    }
+    // Audit filtering + pagination are SERVER-SIDE (GET query params on /ops); no JS needed.
 
     // Nav: smooth scroll + active state.
     var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav__item[data-spy]'));

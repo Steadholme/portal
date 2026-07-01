@@ -311,3 +311,13 @@ a { color: inherit; text-decoration: none; }
 .ops-chip.is-bad { color: var(--down); }
 .ops-chip.is-bad .dot { background: var(--down); }
 .ops-chip__hash { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; color: var(--ink-3); margin-left: 6px; }
+.ops-input--epoch { flex: 0 1 150px; }
+.ops-pager { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.ops-pager .loadmore { display: inline-block; text-decoration: none; }
+.ops-pager__info { font-size: 12.5px; color: var(--ink-3); }
+.au-detail summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--accent-ink); list-style: none; white-space: nowrap; }
+.au-detail summary::-webkit-details-marker { display: none; }
+.au-detail[open] summary { margin-bottom: 8px; }
+.au-detail__meta { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; min-width: 220px; }
+.au-detail__meta dt { color: var(--ink-3); font-weight: 600; white-space: nowrap; }
+.au-detail__meta dd { margin: 0; color: var(--ink-2); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; word-break: break-all; }

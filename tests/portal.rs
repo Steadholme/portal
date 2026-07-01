@@ -316,6 +316,208 @@ async fn ops_console_resilient_when_backends_down() {
     );
 }
 
+/// Fake Watchtower with three distinct sealed events (different sources/actors/actions and
+/// timestamps 1700000000000..1700000200000 ms) for the audit filter tests.
+async fn watchtower_with_three_events() -> String {
+    fake_service(&[
+        ("/api/verify", r#"{"ok":true,"count":3,"head_hash":"abc"}"#),
+        (
+            "/api/events",
+            r#"[
+              {"seq":3,"ts":1700000200000,"source":"keystone","actor":"alice@holdfast.local","action":"login","target":"sso","severity":"info","detail":"ok","prev_hash":"p3","hash":"h3"},
+              {"seq":2,"ts":1700000100000,"source":"relay","actor":"bob@holdfast.local","action":"key.revoke","target":"relay_sk","severity":"warning","detail":"<script>alert(1)</script>","prev_hash":"p2","hash":"h2"},
+              {"seq":1,"ts":1700000000000,"source":"keystone","actor":"carol@holdfast.local","action":"logout","target":"sso","severity":"info","detail":"","prev_hash":"p1","hash":"h1"}
+            ]"#,
+        ),
+    ])
+    .await
+}
+
+fn audit_row_count(html: &str) -> usize {
+    html.matches(r#"class="au-row""#).count()
+}
+
+#[tokio::test]
+async fn ops_gate_holds_with_audit_query_params() {
+    // The admin gate is evaluated before any query handling: filters/pagination params never
+    // widen access.
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
+    let (status, _) = call(
+        &state,
+        get_as_groups("/ops?actor=alice&range=7d&page=2", "eve@holdfast.local", "readers"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "non-admin stays 403 with query params");
+
+    let (status, _) = call(&state, get_as("/ops?actor=alice", "eve@holdfast.local")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "no groups stays 403 with query params");
+
+    let (status, _) = call(
+        &state,
+        get_as_groups("/ops?actor=alice&page=99", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "admin passes with any query params");
+}
+
+#[tokio::test]
+async fn ops_audit_filters_apply_server_side() {
+    let watchtower = watchtower_with_three_events().await;
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower);
+
+    // Actor substring + source substring narrow to the single matching event.
+    let (status, html) = call(
+        &state,
+        get_as_groups("/ops?actor=alice&source=key", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(audit_row_count(&html), 1, "one matching row rendered");
+    assert!(html.contains("alice@holdfast.local"), "matching actor rendered");
+    assert!(!html.contains("bob@holdfast.local"), "non-matching actor filtered out");
+    assert!(html.contains("showing 1"), "summary counts the filtered result");
+    assert!(html.contains(r#"value="alice""#), "filter value echoed in the form");
+
+    // Action substring filter.
+    let (_, html) = call(
+        &state,
+        get_as_groups("/ops?action=revoke", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert_eq!(audit_row_count(&html), 1);
+    assert!(html.contains("key.revoke"), "matching action rendered");
+    assert!(!html.contains("carol@holdfast.local"), "non-matching event filtered out");
+
+    // A filter value with HTML is echoed ESCAPED, never raw, and matches nothing.
+    let (_, html) = call(
+        &state,
+        get_as_groups("/ops?actor=%3Cscript%3E", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert!(html.contains(r#"value="&lt;script&gt;""#), "filter echo is escaped");
+    assert!(!html.contains(r#"value="<script>"#), "no raw HTML echo");
+    assert_eq!(audit_row_count(&html), 0);
+    assert!(html.contains("No audit events to show."), "empty filtered table");
+    assert!(html.contains("No events match the current filters."), "pager explains");
+}
+
+#[tokio::test]
+async fn ops_audit_time_range_filters() {
+    let watchtower = watchtower_with_three_events().await;
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower);
+
+    // Custom epoch bounds (SECONDS) keep only the oldest event (ts 1700000000000 ms).
+    let (status, html) = call(
+        &state,
+        get_as_groups(
+            "/ops?range=custom&from=1700000000&to=1700000050",
+            "root@holdfast.local",
+            "admins",
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(audit_row_count(&html), 1, "custom range keeps one event");
+    assert!(html.contains("carol@holdfast.local"), "the in-range event rendered");
+    assert!(!html.contains("alice@holdfast.local"), "later events excluded");
+    assert!(html.contains(r#"value="1700000000""#), "custom bound echoed in the form");
+    assert!(html.contains(r#"<option value="custom" selected>"#), "preset stays selected");
+
+    // A relative preset (24h): the canned 2023 events are all older -> nothing matches.
+    let (_, html) = call(
+        &state,
+        get_as_groups("/ops?range=24h", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert_eq!(audit_row_count(&html), 0, "preset window excludes old events");
+    assert!(html.contains(r#"<option value="24h" selected>"#), "preset stays selected");
+}
+
+#[tokio::test]
+async fn ops_audit_pagination_preserves_filters() {
+    // 30 events for one actor -> 25 on page 1, 5 on page 2, links carrying the filter.
+    let mut items = String::from("[");
+    for i in 0..30 {
+        if i > 0 {
+            items.push(',');
+        }
+        items.push_str(&format!(
+            r#"{{"seq":{seq},"ts":{ts},"source":"keystone","actor":"page.user@holdfast.local","action":"act.{i}","target":"t","severity":"info","detail":"d","prev_hash":"p","hash":"h"}}"#,
+            seq = 30 - i,
+            ts = 1_700_000_000_000i64 - i as i64,
+        ));
+    }
+    items.push(']');
+    let routes: &'static [(&'static str, &'static str)] = Box::leak(
+        vec![
+            ("/api/verify", r#"{"ok":true,"count":30,"head_hash":"abc"}"# as &'static str),
+            ("/api/events", Box::leak(items.into_boxed_str()) as &'static str),
+        ]
+        .into_boxed_slice(),
+    );
+    let watchtower = fake_service(routes).await;
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower);
+
+    let (status, html) = call(
+        &state,
+        get_as_groups("/ops?actor=page.user", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(audit_row_count(&html), 25, "page 1 shows PAGE_SIZE rows");
+    assert!(html.contains("Page 1 of 2 · 30 events"), "pager summary");
+    assert!(
+        html.contains(r#"href="/ops?actor=page.user&amp;page=2#audit""#),
+        "next link preserves the filter, ampersand-escaped"
+    );
+    assert!(!html.contains("&larr; Prev"), "no prev link on the first page");
+
+    let (_, html) = call(
+        &state,
+        get_as_groups("/ops?actor=page.user&page=2", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert_eq!(audit_row_count(&html), 5, "page 2 shows the remainder");
+    assert!(html.contains("Page 2 of 2 · 30 events"), "pager summary");
+    assert!(
+        html.contains(r#"href="/ops?actor=page.user&amp;page=1#audit""#),
+        "prev link preserves the filter, ampersand-escaped"
+    );
+    assert!(html.contains("act.29"), "page 2 renders the tail of the stream");
+    assert!(!html.contains(r#"<td class="au-action">act.0</td>"#), "page 1 rows not repeated");
+
+    // An out-of-range page clamps to the last page instead of erroring.
+    let (status, html) = call(
+        &state,
+        get_as_groups("/ops?actor=page.user&page=99", "root@holdfast.local", "admins"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("Page 2 of 2"), "overshoot clamps to the last page");
+}
+
+#[tokio::test]
+async fn ops_event_detail_expands_full_metadata_escaped() {
+    let watchtower = watchtower_with_three_events().await;
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower);
+    let (status, html) =
+        call(&state, get_as_groups("/ops", "root@holdfast.local", "admins")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Every row carries a no-JS <details> expander with the full sealed metadata.
+    assert!(html.contains(r#"<details class="au-detail">"#), "detail expander rendered");
+    assert!(html.contains("<dt>Seq</dt><dd>2</dd>"), "sequence number shown");
+    assert!(html.contains("1700000100000 ms"), "raw epoch-ms timestamp shown");
+    assert!(html.contains("<dt>Prev hash</dt><dd>p2</dd>"), "chain prev hash shown");
+    assert!(html.contains("<dt>Hash</dt><dd>h2</dd>"), "chain hash shown");
+    // The free-text detail payload is HTML-escaped, never raw.
+    assert!(
+        html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"),
+        "detail payload escaped"
+    );
+    assert!(!html.contains("<script>alert(1)</script>"), "no raw payload HTML");
+}
+
 #[tokio::test]
 async fn dashboard_without_gateway_identity_falls_back() {
     // No X-Auth-Email (e.g. a direct dev hit) — the page renders with a generic label,
