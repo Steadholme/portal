@@ -29,6 +29,10 @@ thiserror = "2"
 # Structured logging.
 tracing = "0.1"
 tracing-subscriber = "0.3"
+# HMAC-SHA256 verification of the gateway-injected identity signature (X-Auth-Sig). Shared
+# primitive with the rest of the estate; the canonical message matches Sluice's Go signer.
+hmac = "0.12"
+sha2 = "0.10"
 # TLS client for an https BEACON_URL. rustls with the `ring` backend (NOT aws-lc-rs) avoids
 # the C/cmake toolchain — the same portability choice keystone/keyward/beacon made.
 # `webpki-roots` bundles the Mozilla trust anchors so the runtime image needs no system CA
