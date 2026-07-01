@@ -38,6 +38,16 @@ fn get_as(uri: &str, email: &str) -> Request<Body> {
         .unwrap()
 }
 
+/// Request carrying a gateway-injected identity + groups (the admin gate reads `X-Auth-Groups`).
+fn get_as_groups(uri: &str, email: &str, groups: &str) -> Request<Body> {
+    Request::builder()
+        .uri(uri)
+        .header("X-Auth-Email", email)
+        .header("X-Auth-Groups", groups)
+        .body(Body::empty())
+        .unwrap()
+}
+
 /// State whose backend URLs point at the given fakes (dev catalog otherwise).
 fn state_with(beacon: &str, vitals: &str, watchtower: &str) -> AppState {
     let mut config = Config::dev();
@@ -212,6 +222,98 @@ async fn dashboard_is_resilient_when_all_backends_down() {
     assert!(html.contains("No recent activity"), "empty activity feed placeholder");
     // App tiles still render regardless of backend health (status just degrades to Unknown).
     assert!(html.contains("https://mail.w33d.xyz"), "app grid renders even when backends are down");
+}
+
+#[tokio::test]
+async fn ops_console_forbidden_for_non_admin() {
+    // A signed-in user with no admin group (or none at all) must get a 403 on /ops; the public
+    // dashboard is unaffected.
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
+
+    // No groups at all.
+    let (status, _) = call(&state, get_as("/ops", "eve@holdfast.local")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "no groups -> 403 on /ops");
+
+    // A non-admin group.
+    let (status, _) =
+        call(&state, get_as_groups("/ops", "eve@holdfast.local", "readers,writers")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "non-admin group -> 403 on /ops");
+
+    // The public dashboard stays open to the same non-admin user.
+    let (dash, _) = call(&state, get_as("/", "eve@holdfast.local")).await;
+    assert_eq!(dash, StatusCode::OK, "public dashboard unchanged for non-admins");
+}
+
+#[tokio::test]
+async fn ops_console_renders_for_admin() {
+    let beacon = fake_service(&[(
+        "/api/status",
+        r#"{"overall":"degraded","updated_at":1,"components":[
+            {"name":"Identity","kind":"tcp","status":"operational","uptime_24h":99.98},
+            {"name":"Gateway","kind":"http","status":"degraded","uptime_24h":97.5}
+        ],"incidents":[]}"#,
+    )])
+    .await;
+    let vitals = fake_service(&[(
+        "/api/metrics",
+        r#"{"samples":[
+            {"host":"h","metric":"cpu_pct","value":21.0,"ts":200},
+            {"host":"h","metric":"mem_pct","value":55.0,"ts":200},
+            {"host":"h","metric":"load1","value":0.42,"ts":200}
+        ]}"#,
+    )])
+    .await;
+    let watchtower = fake_service(&[
+        ("/api/verify", r#"{"ok":true,"count":7,"head_hash":"deadbeefcafe0001"}"#),
+        (
+            "/api/events",
+            r#"[
+              {"seq":7,"ts":1700000000000,"source":"keystone","actor":"alice@holdfast.local","action":"login","target":"sso","severity":"info"},
+              {"seq":6,"ts":1699999000000,"source":"relay","actor":"bob@holdfast.local","action":"key.revoke","target":"relay_sk_x","severity":"warning"}
+            ]"#,
+        ),
+    ])
+    .await;
+
+    let state = state_with(&beacon, &vitals, &watchtower);
+    let (status, html) =
+        call(&state, get_as_groups("/ops", "root@holdfast.local", "infra-admins")).await;
+    assert_eq!(status, StatusCode::OK, "admin group unlocks /ops");
+
+    // Audit viewer: verify summary + per-event rows (source/actor/action all present).
+    assert!(html.contains("Cross-service audit"), "audit section rendered");
+    assert!(html.contains("7 sealed"), "chain count in the audit summary");
+    assert!(html.contains("chain verified"), "integrity flag shown");
+    assert!(html.contains("keystone"), "event source rendered");
+    assert!(html.contains("key.revoke"), "event action rendered");
+    assert!(html.contains(r#"class="au-row""#), "audit rows rendered");
+    assert!(html.contains(r#"data-sev="warning""#), "severity filter key on the row");
+
+    // Per-service health table: name + status + uptime.
+    assert!(html.contains("Service health"), "health section rendered");
+    assert!(html.contains("Identity"), "component name in the health table");
+    assert!(html.contains("99.98%"), "component 24h uptime rendered");
+    assert!(html.contains("Operational"), "live status pill in the health table");
+
+    // Host metrics from Vitals.
+    assert!(html.contains("Host CPU"), "host metric tiles present");
+    assert!(html.contains("21%"), "cpu gauge");
+    assert!(html.contains("0.42"), "load average");
+}
+
+#[tokio::test]
+async fn ops_console_resilient_when_backends_down() {
+    // Admin hits /ops but every backend is down: the console renders (200) with graceful
+    // placeholders rather than erroring.
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
+    let (status, html) =
+        call(&state, get_as_groups("/ops", "root@holdfast.local", "admins")).await;
+    assert_eq!(status, StatusCode::OK, "console renders even with every backend down");
+    assert!(html.contains("No audit events to show."), "empty audit placeholder");
+    assert!(
+        html.contains("Beacon has not reported component health yet."),
+        "empty health placeholder"
+    );
 }
 
 #[tokio::test]

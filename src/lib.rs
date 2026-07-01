@@ -8,6 +8,7 @@
 //!
 //! Endpoints:
 //! - `GET /`         the dashboard (SSO-fronted; reads `X-Auth-Email`)
+//! - `GET /ops`      the admin-gated read-only operator console (`X-Auth-Groups` ∩ admins)
 //! - `GET /healthz`  liveness (public; used by the container HEALTHCHECK)
 
 pub mod auth;
@@ -41,6 +42,7 @@ pub struct AppState {
 pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/", get(handlers::dashboard::dashboard))
+        .route("/ops", get(handlers::ops::ops))
         .route("/healthz", get(handlers::health::healthz))
         // Reject a forged gateway identity (spoofed X-Auth-* from a rogue in-network peer):
         // when GATEWAY_HMAC_KEY is set, an injected identity MUST carry a valid X-Auth-Sig.

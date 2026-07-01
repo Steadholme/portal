@@ -17,27 +17,36 @@ use crate::http;
 
 /// Per-fetch budget. Watchtower is in-network; keep it short.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2);
-/// How many recent events the activity feed shows.
+/// How many recent events the dashboard activity feed shows.
 pub const FEED_LEN: usize = 8;
+/// How many recent events the operator console's cross-service AUDIT viewer loads (the
+/// client then filters + progressively reveals them). Bounded so the payload stays small.
+pub const AUDIT_MAX: usize = 200;
 
-/// `/api/verify` response we care about: the chain length + integrity flag.
+/// `/api/verify` response we care about: the chain length, integrity flag + head hash.
 #[derive(Debug, Default, Deserialize)]
 pub struct Verify {
     #[serde(default)]
     pub ok: bool,
     #[serde(default)]
     pub count: usize,
+    /// The chain head hash (shown in the operator console's audit header).
+    #[serde(default)]
+    pub head_hash: String,
     /// Whether Watchtower answered at all (drives "—" vs a real count + the verified dot).
     #[serde(skip)]
     pub reached: bool,
 }
 
-/// One sealed audit event (the fields the activity feed renders; chain hashes are ignored).
-/// `ts` is epoch MILLISECONDS (Watchtower stamps appends with `now_ms`).
+/// One sealed audit event (the fields the activity feed + audit viewer render; chain hashes are
+/// ignored). `ts` is epoch MILLISECONDS (Watchtower stamps appends with `now_ms`).
 #[derive(Clone, Debug, Deserialize)]
 pub struct Event {
     #[serde(default)]
     pub ts: i64,
+    /// Emitting service (the audit viewer filters by it). Absent on older events -> "".
+    #[serde(default)]
+    pub source: String,
     #[serde(default)]
     pub actor: String,
     #[serde(default)]
@@ -67,6 +76,16 @@ pub async fn fetch_events(watchtower_url: &str) -> Vec<Event> {
     }
 }
 
+/// Fetch the cross-service audit stream for the operator console (newest-first), truncated to
+/// [`AUDIT_MAX`]. On ANY failure returns an empty list — the console degrades, never errors.
+pub async fn fetch_audit(watchtower_url: &str) -> Vec<Event> {
+    let url = format!("{}/api/events", watchtower_url.trim_end_matches('/'));
+    match http::fetch_text(&url, FETCH_TIMEOUT).await {
+        Some(body) => parse_events_capped(&body, AUDIT_MAX),
+        None => Vec::new(),
+    }
+}
+
 /// Parse `/api/verify`. Foreign/invalid JSON yields the default (not reached).
 pub fn parse_verify(body: &str) -> Verify {
     match serde_json::from_str::<Verify>(body) {
@@ -81,9 +100,15 @@ pub fn parse_verify(body: &str) -> Verify {
 /// Parse `/api/events` (a newest-first JSON array), keeping the most recent [`FEED_LEN`].
 /// Foreign/invalid JSON yields an empty feed.
 pub fn parse_events(body: &str) -> Vec<Event> {
+    parse_events_capped(body, FEED_LEN)
+}
+
+/// Parse `/api/events` (a newest-first JSON array), keeping the most recent `cap` events.
+/// Foreign/invalid JSON yields an empty list.
+pub fn parse_events_capped(body: &str, cap: usize) -> Vec<Event> {
     match serde_json::from_str::<Vec<Event>>(body) {
         Ok(mut events) => {
-            events.truncate(FEED_LEN);
+            events.truncate(cap);
             events
         }
         Err(_) => Vec::new(),
@@ -100,6 +125,7 @@ mod tests {
         assert!(v.reached);
         assert!(v.ok);
         assert_eq!(v.count, 42);
+        assert_eq!(v.head_hash, "abc");
 
         let broken = parse_verify(r#"{"ok":false,"count":9,"head_hash":"x","first_broken_seq":3}"#);
         assert!(broken.reached);
@@ -133,6 +159,34 @@ mod tests {
         // Newest-first ordering is preserved (first element is the array's first element).
         assert_eq!(events[0].actor, "u0");
         assert_eq!(events[0].action, "login");
+    }
+
+    #[test]
+    fn parse_events_reads_source_for_audit_viewer() {
+        let events = parse_events(
+            r#"[{"seq":1,"ts":1700000000000,"source":"keystone","actor":"alice","action":"login","target":"sso","severity":"info"}]"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].source, "keystone");
+        assert_eq!(events[0].actor, "alice");
+    }
+
+    #[test]
+    fn parse_events_capped_keeps_more_than_feed_len() {
+        let mut items = String::from("[");
+        for i in 0..(AUDIT_MAX + 50) {
+            if i > 0 {
+                items.push(',');
+            }
+            items.push_str(&format!(
+                r#"{{"seq":{i},"ts":{ts},"source":"s{i}","actor":"u{i}","action":"a","target":"t","severity":"info"}}"#,
+                ts = 1_700_000_000_000i64 + i as i64
+            ));
+        }
+        items.push(']');
+        let events = parse_events_capped(&items, AUDIT_MAX);
+        assert_eq!(events.len(), AUDIT_MAX, "capped at AUDIT_MAX");
+        assert_eq!(events[0].source, "s0", "newest-first order preserved");
     }
 
     #[test]

@@ -8,6 +8,7 @@
 
 pub mod dashboard;
 pub mod health;
+pub mod ops;
 
 /// Embedded design system, inlined into the rendered page's `<style>`.
 pub const APP_CSS: &str = include_str!("../../static/app.css");

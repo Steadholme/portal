@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>w33d · Operator Console</title>
+  <style>{{CSS}}</style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Primary">
+      <a class="sidebar__brand" href="/" aria-label="HOLDFAST home">
+        <span class="sidebar__shield" aria-hidden="true">{{SHIELD}}</span>
+        <span class="sidebar__wordmark"><b>w33d</b><span>OPERATOR</span></span>
+      </a>
+
+      <nav class="sidebar__nav">
+        <a class="nav__item" href="/">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m12 8-4 4 4 4M8 12h13"/></svg>
+          <span class="nav__text">Back to dashboard</span>
+        </a>
+
+        <p class="nav__label">Console</p>
+        <a class="nav__item is-active" href="#audit" data-spy="audit">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span class="nav__text">Audit</span>
+        </a>
+        <a class="nav__item" href="#health" data-spy="health">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
+          <span class="nav__text">Service health</span>
+        </a>
+        <a class="nav__item" href="#hostmetrics" data-spy="hostmetrics">
+          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+          <span class="nav__text">Host metrics</span>
+        </a>
+      </nav>
+
+      <div class="sidebar__user">
+        <span class="avatar" aria-hidden="true">{{INITIAL}}</span>
+        <span class="sidebar__who">
+          <span class="sidebar__name">{{NAME}}</span>
+          <span class="sidebar__mail">{{EMAIL}}</span>
+        </span>
+        <a class="sidebar__out" href="https://sso.w33d.xyz/_gw/auth/logout" title="Sign out" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
+        </a>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="topbar__burger" id="burger" aria-label="Toggle menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="topbar__title">
+          <strong>Operator Console</strong>
+          <span>Read-only · admin</span>
+        </div>
+      </header>
+
+      <div class="content" id="top">
+        <div class="pagehead">
+          <p class="kicker">Federated Operations</p>
+          <h1>Operator <span class="grad">Console</span></h1>
+          <p class="lede">Cross-service audit, live service health, and host metrics — read-only.</p>
+        </div>
+
+        <section class="sys" id="audit" aria-label="Audit viewer">
+          <div class="sys__head">
+            <h2>Cross-service audit</h2>
+            <span class="hint">{{AUDIT_SUMMARY}}</span>
+          </div>
+          <div class="ops-filters">
+            <input id="auditq" class="ops-input" type="search" placeholder="Filter by source, actor, action or target…" autocomplete="off" aria-label="Filter audit events">
+            <select id="auditsev" class="ops-select" aria-label="Filter by severity">
+              <option value="">All severities</option>
+              <option value="critical">Critical</option>
+              <option value="error">Error</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+          <div class="ops-tablewrap">
+            <table class="ops-table" id="audittable">
+              <thead>
+                <tr><th>When</th><th>Severity</th><th>Source</th><th>Actor</th><th>Action</th><th>Target</th></tr>
+              </thead>
+              <tbody id="auditbody">
+                {{AUDIT_ROWS}}
+              </tbody>
+            </table>
+          </div>
+          <div class="ops-note" id="auditnone" hidden>No audit events match your filter.</div>
+          <div class="ops-more"><button type="button" class="loadmore" id="auditmore">Load more</button></div>
+        </section>
+
+        <section class="sys" id="health" aria-label="Service health">
+          <div class="sys__head">
+            <h2>Service health</h2>
+            <span class="hint">Live from Beacon</span>
+          </div>
+          <div class="ops-tablewrap">
+            <table class="ops-table">
+              <thead>
+                <tr><th>Service</th><th>Status</th><th>Uptime · 24h</th></tr>
+              </thead>
+              <tbody>
+                {{HEALTH_ROWS}}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="sys" id="hostmetrics" aria-label="Host metrics">
+          <div class="sys__head">
+            <h2>Host metrics</h2>
+            <span class="hint">Live from Vitals · Watchtower</span>
+          </div>
+          <div class="metrics">{{METRICS}}</div>
+        </section>
+
+        <footer class="site-foot">
+          <span>HOLDFAST · Operator Console</span>
+          <span>Read-only federated view.</span>
+        </footer>
+      </div>
+    </div>
+  </div>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <script>
+  (function () {
+    var sidebar = document.getElementById('sidebar'),
+        burger = document.getElementById('burger'),
+        scrim = document.getElementById('scrim');
+    function setMenu(open) {
+      document.body.classList.toggle('nav-open', open);
+      scrim.hidden = !open;
+      if (burger) burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    if (burger) burger.addEventListener('click', function () { setMenu(!document.body.classList.contains('nav-open')); });
+    if (scrim) scrim.addEventListener('click', function () { setMenu(false); });
+
+    // Audit viewer: client-side filter (free-text + severity) with progressive "load more".
+    var PAGE = 25;
+    var rows = Array.prototype.slice.call(document.querySelectorAll('#auditbody .au-row'));
+    var q = document.getElementById('auditq'),
+        sev = document.getElementById('auditsev'),
+        more = document.getElementById('auditmore'),
+        none = document.getElementById('auditnone'),
+        shown = PAGE;
+    function apply() {
+      var qs = (q.value || '').trim().toLowerCase(),
+          sv = sev.value,
+          matches = 0, visible = 0;
+      rows.forEach(function (r) {
+        var hit = (!qs || (r.getAttribute('data-f') || '').indexOf(qs) !== -1) &&
+                  (!sv || r.getAttribute('data-sev') === sv);
+        if (hit) {
+          matches++;
+          if (visible < shown) { r.style.display = ''; visible++; }
+          else { r.style.display = 'none'; }
+        } else { r.style.display = 'none'; }
+      });
+      if (none) none.hidden = matches !== 0 || rows.length === 0;
+      if (more) more.style.display = (visible < matches) ? '' : 'none';
+    }
+    if (rows.length) {
+      if (q) q.addEventListener('input', function () { shown = PAGE; apply(); });
+      if (sev) sev.addEventListener('change', function () { shown = PAGE; apply(); });
+      if (more) more.addEventListener('click', function () { shown += PAGE; apply(); });
+      apply();
+    } else if (more) {
+      more.style.display = 'none';
+    }
+
+    // Nav: smooth scroll + active state.
+    var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav__item[data-spy]'));
+    function setActive(id) {
+      navItems.forEach(function (n) { n.classList.toggle('is-active', n.getAttribute('data-spy') === id); });
+    }
+    navItems.forEach(function (n) {
+      n.addEventListener('click', function (e) {
+        var id = n.getAttribute('data-spy'), el = document.getElementById(id);
+        if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActive(id); setMenu(false); }
+      });
+    });
+  })();
+  </script>
+</body>
+</html>

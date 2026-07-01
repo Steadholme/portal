@@ -31,6 +31,19 @@ struct BeaconStatus {
 struct BeaconComponent {
     name: String,
     status: String,
+    /// Rolling 24h uptime percentage (the operator console's HEALTH table shows it). Absent on
+    /// older Beacons -> `None` -> rendered "—".
+    #[serde(default)]
+    uptime_24h: Option<f64>,
+}
+
+/// One component row for the operator console's per-service HEALTH table (name / status /
+/// uptime), in the order Beacon reported them.
+#[derive(Clone, Debug)]
+pub struct Component {
+    pub name: String,
+    pub status: String,
+    pub uptime_24h: Option<f64>,
 }
 
 /// A parsed Beacon snapshot: per-component statuses plus the operational rollup the
@@ -40,6 +53,8 @@ struct BeaconComponent {
 pub struct Statuses {
     /// component name -> status token (`operational` | `degraded` | `down`).
     pub by_name: HashMap<String, String>,
+    /// Ordered component rows (name / status / uptime) for the operator HEALTH table.
+    pub components: Vec<Component>,
     /// Count of components reporting `operational`.
     pub up: usize,
     /// Total components Beacon reported.
@@ -79,6 +94,15 @@ pub fn parse_statuses(body: &str) -> Statuses {
                 .iter()
                 .filter(|c| c.status == "operational")
                 .count();
+            let components: Vec<Component> = snap
+                .components
+                .iter()
+                .map(|c| Component {
+                    name: c.name.clone(),
+                    status: c.status.clone(),
+                    uptime_24h: c.uptime_24h,
+                })
+                .collect();
             let by_name = snap
                 .components
                 .into_iter()
@@ -86,6 +110,7 @@ pub fn parse_statuses(body: &str) -> Statuses {
                 .collect();
             Statuses {
                 by_name,
+                components,
                 up,
                 total,
                 reached: true,
@@ -118,6 +143,14 @@ mod tests {
         assert_eq!(s.status_of("Nope"), "unknown");
         assert_eq!(s.total, 3);
         assert_eq!(s.up, 2);
+
+        // Ordered rows (with uptime) back the operator HEALTH table.
+        assert_eq!(s.components.len(), 3);
+        assert_eq!(s.components[0].name, "Identity");
+        assert_eq!(s.components[0].status, "operational");
+        assert_eq!(s.components[0].uptime_24h, Some(100.0));
+        assert_eq!(s.components[1].name, "Gateway");
+        assert_eq!(s.components[1].uptime_24h, Some(98.0));
     }
 
     #[test]

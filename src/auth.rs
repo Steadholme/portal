@@ -28,6 +28,54 @@ pub fn signed_in_email(headers: &HeaderMap) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
+// Admin authorization (X-Auth-Groups) — gates the /ops operator console
+// ---------------------------------------------------------------------------
+
+/// Group names that authorize the `/ops` operator console. Membership in ANY of these unlocks
+/// the federated read-only console. Same shape as the rest of the estate's admin gate
+/// (Relay/Watchtower/Echo `ADMIN_GROUPS`).
+pub const ADMIN_GROUPS: &[&str] = &["admins", "infra-admins"];
+
+/// The signed-in user's groups, parsed from the comma-separated `X-Auth-Groups` header. The
+/// gateway injects AND HMAC-signs this header (see [`gateway_identity_ok`]), so on the apex
+/// route it is trustworthy. Empty when the header is absent/blank.
+pub fn author_groups(headers: &HeaderMap) -> Vec<String> {
+    header_value(headers, HEADER_GROUPS)
+        .map(|raw| {
+            raw.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether the signed-in user belongs to `group` (exact match against `X-Auth-Groups`).
+pub fn has_group(headers: &HeaderMap, group: &str) -> bool {
+    author_groups(headers).iter().any(|g| g == group)
+}
+
+/// Whether the signed-in user is in ANY [`ADMIN_GROUPS`] entry (`X-Auth-Groups` ∩ admin set).
+pub fn is_admin(headers: &HeaderMap) -> bool {
+    let groups = author_groups(headers);
+    ADMIN_GROUPS
+        .iter()
+        .any(|a| groups.iter().any(|g| g == a))
+}
+
+/// Require admin membership for the `/ops` console. `Err(StatusCode::FORBIDDEN)` when the
+/// signed-in user carries no admin group — an ordinary user (or an unauthenticated dev hit
+/// with no groups) never reaches the console.
+pub fn require_admin(headers: &HeaderMap) -> Result<(), axum::http::StatusCode> {
+    if is_admin(headers) {
+        Ok(())
+    } else {
+        Err(axum::http::StatusCode::FORBIDDEN)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Gateway identity signature (X-Auth-Sig) verification
 // ---------------------------------------------------------------------------
 
@@ -141,5 +189,35 @@ mod tests {
         let mut h = HeaderMap::new();
         h.insert(HEADER_SUBJECT, HeaderValue::from_static("user-42"));
         assert!(gateway_identity_ok(&h));
+    }
+
+    #[test]
+    fn admin_gate_over_groups() {
+        // No X-Auth-Groups -> no groups, not an admin, require_admin rejects.
+        let none = HeaderMap::new();
+        assert!(author_groups(&none).is_empty());
+        assert!(!has_group(&none, "admins"));
+        assert!(!is_admin(&none));
+        assert!(require_admin(&none).is_err());
+
+        // Comma-separated groups (with whitespace) parse and match by exact name; either admin
+        // group authorizes the console.
+        let mut infra = HeaderMap::new();
+        infra.insert(HEADER_GROUPS, HeaderValue::from_static("dev, infra-admins ,x"));
+        assert!(has_group(&infra, "infra-admins"));
+        assert!(has_group(&infra, "dev"));
+        assert!(!has_group(&infra, "admins"));
+        assert!(is_admin(&infra));
+        assert!(require_admin(&infra).is_ok());
+
+        let mut plain = HeaderMap::new();
+        plain.insert(HEADER_GROUPS, HeaderValue::from_static("admins"));
+        assert!(is_admin(&plain));
+
+        // A non-admin group alone never authorizes.
+        let mut other = HeaderMap::new();
+        other.insert(HEADER_GROUPS, HeaderValue::from_static("readers,writers"));
+        assert!(!is_admin(&other));
+        assert_eq!(require_admin(&other), Err(axum::http::StatusCode::FORBIDDEN));
     }
 }
