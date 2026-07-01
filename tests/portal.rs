@@ -134,8 +134,9 @@ async fn dashboard_renders_full_command_center() {
     let (status, html) = call(&state, get_as("/", "alice@holdfast.local")).await;
     assert_eq!(status, StatusCode::OK);
 
-    // Greeting uses the email local-part (capitalized); the full email shows in the app-bar.
-    assert!(html.contains(", Alice"), "greeting names the signed-in user");
+    // Greeting uses the email local-part (capitalized), rendered inside the gradient name span;
+    // the full email shows in the app-bar.
+    assert!(html.contains(r#"class="grad">Alice"#), "greeting names the signed-in user");
     assert!(html.contains("alice@holdfast.local"), "signed-in email rendered");
 
     // Live metric cards.
@@ -150,28 +151,34 @@ async fn dashboard_renders_full_command_center() {
     assert!(html.contains("Audit events"), "audit card present");
     assert!(html.contains("Chain verified"), "audit chain shows verified");
 
-    // Services grid: all nine default tiles + their public subdomains.
+    // Services grid: representative public app tiles + their public subdomains (mgmt surfaces
+    // like Vitals/Audit are intentionally NOT on the public apex).
     for (name, url) in [
-        ("Identity", "https://id.w33d.xyz"),
+        ("Identity", "https://sso.w33d.xyz"),
         ("Status", "https://status.w33d.xyz"),
-        ("Vitals", "https://vitals.w33d.xyz"),
-        ("Audit", "https://audit.w33d.xyz"),
+        ("Mail", "https://mail.w33d.xyz"),
         ("Blog", "https://blog.w33d.xyz"),
         ("Forum", "https://forum.w33d.xyz"),
         ("Wiki", "https://wiki.w33d.xyz"),
         ("Paste", "https://paste.w33d.xyz"),
-        ("Mail", "https://mail.w33d.xyz"),
+        ("Chat", "https://chat.w33d.xyz"),
+        ("Search", "https://search.w33d.xyz"),
+        ("Git", "https://git.w33d.xyz"),
     ] {
         assert!(html.contains(name), "{name} tile rendered");
         assert!(html.contains(url), "{name} links to {url}");
     }
+    // De-published mgmt surfaces must NOT appear on the public apex.
+    assert!(!html.contains("https://vault.w33d.xyz"), "Vault is VPN-only, not a public tile");
+    assert!(!html.contains("https://audit.w33d.xyz"), "Audit is VPN-only, not a public tile");
 
-    // Live pills mapped from Beacon: Identity -> Operational, Status(=Gateway) -> Degraded.
-    assert!(html.contains(">Operational<"), "Identity shows Operational pill");
-    assert!(html.contains(">Degraded<"), "Status(Gateway) shows Degraded pill");
-    // Mail is coming soon (no live pill); unmapped components fall back to Unknown.
-    assert!(html.contains(">Coming soon<"), "Mail shows Coming soon tag");
-    assert!(html.contains(">Unknown<"), "unmapped components show Unknown");
+    // Live status is carried in each tile's title/aria-label (icon-dot design, not a text pill):
+    // Identity -> Operational, Status(=Gateway) -> Degraded, unmapped components -> Unknown.
+    assert!(html.contains(r#"title="Operational""#), "Identity shows Operational status");
+    assert!(html.contains(r#"title="Degraded""#), "Status(Gateway) shows Degraded status");
+    assert!(html.contains(r#"title="Unknown""#), "unmapped components show Unknown");
+    // Mail is LIVE now — no Coming-soon tile should remain.
+    assert!(!html.contains(">Soon<"), "no coming-soon tiles in the default catalog");
 
     // Recent-activity feed from Watchtower.
     assert!(html.contains("login"), "activity feed shows the action");
@@ -182,7 +189,7 @@ async fn dashboard_renders_full_command_center() {
 
     // Logout points at the gateway on the issuer host (absolute, cross-subdomain).
     assert!(
-        html.contains("https://id.w33d.xyz/_gw/auth/logout"),
+        html.contains("https://sso.w33d.xyz/_gw/auth/logout"),
         "logout points at the gateway"
     );
 }
@@ -196,15 +203,15 @@ async fn dashboard_is_resilient_when_all_backends_down() {
     assert_eq!(status, StatusCode::OK, "page renders even when every backend is down");
     assert!(html.contains("bob@holdfast.local"), "email still rendered");
 
-    // Unknown pills + "—" placeholders everywhere; no error, no panic.
-    assert!(html.contains(">Unknown<"), "down Beacon -> Unknown pills");
+    // Unknown status (in tile title) + "—" placeholders everywhere; no error, no panic.
+    assert!(html.contains(r#"title="Unknown""#), "down Beacon -> Unknown status");
     assert!(html.contains("—"), "missing metrics render the em-dash placeholder");
     assert!(html.contains("awaiting Beacon"), "systems card degrades gracefully");
     assert!(html.contains("awaiting Vitals"), "gauges degrade gracefully");
     assert!(html.contains("awaiting Watchtower"), "audit card degrades gracefully");
     assert!(html.contains("No recent activity"), "empty activity feed placeholder");
-    // Coming-soon tile is unaffected by backend health.
-    assert!(html.contains(">Coming soon<"), "coming-soon tile unaffected");
+    // App tiles still render regardless of backend health (status just degrades to Unknown).
+    assert!(html.contains("https://mail.w33d.xyz"), "app grid renders even when backends are down");
 }
 
 #[tokio::test]
@@ -215,5 +222,5 @@ async fn dashboard_without_gateway_identity_falls_back() {
     let (status, html) = call(&state, get("/")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("operator"), "falls back to a generic signed-in label");
-    assert!(html.contains(", Operator"), "greeting falls back gracefully");
+    assert!(html.contains(r#"class="grad">Operator"#), "greeting falls back gracefully");
 }

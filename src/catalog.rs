@@ -32,85 +32,53 @@ pub struct CatalogEntry {
     pub coming_soon: bool,
 }
 
-/// The built-in HOLDFAST service catalog: the four platform services (Identity, Status,
-/// Vitals, Audit), the four Phase-1 content services (Blog, Forum, Wiki, Paste), and the
-/// reserved-for-Corvid Mail tile (coming soon). Each maps to a Beacon component name for its
-/// live status; an operator overrides the whole list via `PORTAL_CATALOG`. The component
-/// names mirror the deploy's `BEACON_SEED`, so the live pills resolve out of the box.
+/// The built-in HOLDFAST **public** apex catalog: only the user-facing app surfaces that are
+/// actually reachable through the public gateway. Ops/mgmt surfaces (Vitals, Audit, Vault,
+/// Backup, CI, DNS, …) are deliberately EXCLUDED — post network-zoning they are VPN-only and
+/// return 404 to the public, so they never belong on a public launcher. Each tile maps to a
+/// Beacon component name (mirrors the deploy's `BEACON_SEED`) so the live status pill resolves.
+///
+/// The list is curated from a per-service audit of the real product surface (every entry below
+/// is a verified working feature, not a routed placeholder). An operator may still override the
+/// whole list via `PORTAL_CATALOG`.
 pub fn default_catalog() -> Vec<CatalogEntry> {
+    // (name, url, description, beacon component, icon key)
+    let e = |name: &str, url: &str, description: &str, component: &str, icon: &str| CatalogEntry {
+        name: name.to_string(),
+        url: url.to_string(),
+        description: description.to_string(),
+        component: component.to_string(),
+        icon: icon.to_string(),
+        coming_soon: false,
+    };
     vec![
-        CatalogEntry {
-            name: "Identity".to_string(),
-            url: "https://id.w33d.xyz".to_string(),
-            description: "Single sign-on, passkeys, and the OIDC issuer.".to_string(),
-            component: "Identity".to_string(),
-            icon: "identity".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Status".to_string(),
-            url: "https://status.w33d.xyz".to_string(),
-            description: "Live availability and incident history.".to_string(),
-            component: "Gateway".to_string(),
-            icon: "status".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Vitals".to_string(),
-            url: "https://vitals.w33d.xyz".to_string(),
-            description: "Host metrics and system health dashboards.".to_string(),
-            component: "Vitals".to_string(),
-            icon: "vitals".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Audit".to_string(),
-            url: "https://audit.w33d.xyz".to_string(),
-            description: "Tamper-evident security audit trail.".to_string(),
-            component: "Audit".to_string(),
-            icon: "audit".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Blog".to_string(),
-            url: "https://blog.w33d.xyz".to_string(),
-            description: "Personal blog and field notes.".to_string(),
-            component: "Blog".to_string(),
-            icon: "blog".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Forum".to_string(),
-            url: "https://forum.w33d.xyz".to_string(),
-            description: "Discussion for the keep — categories, threads & replies.".to_string(),
-            component: "Forum".to_string(),
-            icon: "forum".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Wiki".to_string(),
-            url: "https://wiki.w33d.xyz".to_string(),
-            description: "Knowledge base and operational runbooks.".to_string(),
-            component: "Wiki".to_string(),
-            icon: "wiki".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Paste".to_string(),
-            url: "https://paste.w33d.xyz".to_string(),
-            description: "Share code snippets and pastes across the estate.".to_string(),
-            component: "Pastefire".to_string(),
-            icon: "paste".to_string(),
-            coming_soon: false,
-        },
-        CatalogEntry {
-            name: "Mail".to_string(),
-            url: "https://mail.w33d.xyz".to_string(),
-            description: "Secure mail and messaging (Corvid).".to_string(),
-            component: "Mail".to_string(),
-            icon: "mail".to_string(),
-            coming_soon: true,
-        },
+        // --- Communication ---
+        e("Mail", "https://mail.w33d.xyz", "SSO webmail — inbox, compose and send DKIM-signed mail.", "Mail", "mail"),
+        e("Chat", "https://chat.w33d.xyz", "Real-time team chat with rooms and a live feed.", "Chat", "chat"),
+        e("Notifications", "https://notify.w33d.xyz", "Notification inbox with mark-read and a live stream.", "Notify", "bell"),
+        e("Inbox", "https://inbox.w33d.xyz", "Unified inbox — unread chat, notifications and feeds.", "Inbox", "inbox"),
+        e("Calendar", "https://cal.w33d.xyz", "Personal calendar and address book.", "Calendar", "calendar"),
+        // --- Content & publishing ---
+        e("Blog", "https://blog.w33d.xyz", "Markdown blog/CMS with an \u{201c}ask your blog\u{201d} Q&A.", "Blog", "blog"),
+        e("Forum", "https://forum.w33d.xyz", "Discussion forum — categories, threads and replies.", "Forum", "forum"),
+        e("Wiki", "https://wiki.w33d.xyz", "Knowledge-base wiki with revision history.", "Wiki", "wiki"),
+        e("Comments", "https://comments.w33d.xyz", "Embeddable threaded comments with moderation.", "Comments", "comments"),
+        e("Paste", "https://paste.w33d.xyz", "Pastebin with expiry and burn-after-read snippets.", "Pastefire", "paste"),
+        e("Drive", "https://drive.w33d.xyz", "Image/file host with unguessable share links.", "Drive", "drive"),
+        // --- Reading ---
+        e("Feeds", "https://rss.w33d.xyz", "RSS/Atom river reader with local TL;DRs.", "Feeds", "rss"),
+        e("Clips", "https://clip.w33d.xyz", "Read-it-later clipper with a clean reader view.", "Clips", "clip"),
+        e("Social", "https://social.w33d.xyz", "Single-user ActivityPub microblog.", "Social", "social"),
+        // --- Knowledge & AI ---
+        e("Search", "https://search.w33d.xyz", "Federated search with cited Q&A across your content.", "Search", "search"),
+        e("Assistant", "https://ami.w33d.xyz", "Personal AI chat plus replayable AI workflows.", "Familiar", "assistant"),
+        e("AI Gateway", "https://ai.w33d.xyz", "OpenAI-compatible LLM gateway and API-key console.", "Relay", "ai"),
+        // --- Developer ---
+        e("Git", "https://git.w33d.xyz", "Self-hosted git forge with issues and pull requests.", "Git", "git"),
+        e("Registry", "https://registry.w33d.xyz", "OCI/Docker container registry.", "Registry", "registry"),
+        // --- Platform ---
+        e("Identity", "https://sso.w33d.xyz", "Single sign-on, passkeys and account.", "Identity", "identity"),
+        e("Status", "https://status.w33d.xyz", "Live service status and uptime.", "Gateway", "status"),
     ]
 }
 
@@ -125,27 +93,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_catalog_has_the_nine_holdfast_services() {
+    fn default_catalog_is_public_apps_only() {
         let cat = default_catalog();
-        assert_eq!(cat.len(), 9);
+        assert_eq!(cat.len(), 21, "curated public app catalog");
 
         let identity = cat.iter().find(|e| e.name == "Identity").expect("Identity tile");
-        assert_eq!(identity.url, "https://id.w33d.xyz");
+        assert_eq!(identity.url, "https://sso.w33d.xyz");
         assert_eq!(identity.component, "Identity");
-        assert!(!identity.coming_soon);
 
+        // Mail (Corvid) is LIVE now — never coming_soon.
         let mail = cat.iter().find(|e| e.name == "Mail").expect("Mail tile");
         assert_eq!(mail.url, "https://mail.w33d.xyz");
-        assert!(mail.coming_soon, "Mail is reserved for Corvid — coming soon");
+        assert!(!mail.coming_soon, "Corvid mail is live");
+        assert!(cat.iter().all(|e| !e.coming_soon), "no coming-soon tiles remain");
 
         // Status maps to Beacon's Gateway component; Paste maps to the Pastefire component.
-        let status = cat.iter().find(|e| e.name == "Status").expect("Status tile");
-        assert_eq!(status.component, "Gateway");
-        let paste = cat.iter().find(|e| e.name == "Paste").expect("Paste tile");
-        assert_eq!(paste.component, "Pastefire");
+        assert_eq!(cat.iter().find(|e| e.name == "Status").unwrap().component, "Gateway");
+        assert_eq!(cat.iter().find(|e| e.name == "Paste").unwrap().component, "Pastefire");
 
-        for name in ["Vitals", "Audit", "Blog", "Forum", "Wiki"] {
+        // Every real user-facing surface is present.
+        for name in [
+            "Blog", "Forum", "Wiki", "Comments", "Paste", "Drive", "Feeds", "Clips", "Social",
+            "Search", "Assistant", "AI Gateway", "Chat", "Calendar", "Notifications", "Inbox",
+            "Git", "Registry",
+        ] {
             assert!(cat.iter().any(|e| e.name == name), "{name} tile present");
+        }
+
+        // VPN-only mgmt surfaces must NOT be advertised on the public apex.
+        for host in [
+            "vault", "audit", "vitals", "backup", "rca", "traces", "ci", "atlas", "guard", "mesh",
+            "spiffe", "deploy", "egress", "purple", "logs", "dns", "people", "authz", "risk",
+            "intel", "canary", "edge", "events", "jobs",
+        ] {
+            let url = format!("https://{host}.w33d.xyz");
+            assert!(
+                cat.iter().all(|e| e.url != url),
+                "mgmt host {host} must not be a public tile"
+            );
+        }
+
+        // Every tile carries a non-empty beacon component + icon key so pills/glyphs resolve.
+        for e in &cat {
+            assert!(!e.component.is_empty(), "{} has a beacon component", e.name);
+            assert!(!e.icon.is_empty(), "{} has an icon", e.name);
         }
     }
 
