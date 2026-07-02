@@ -4,7 +4,8 @@
 //! a time-of-day greeting, a row of LIVE METRIC CARDS (systems online, host CPU/memory, audit
 //! events, load), a SERVICES grid (one live-status card per catalog entry), and a RECENT
 //! ACTIVITY feed of the latest audit events. The signed-in email comes from the
-//! gateway-injected `X-Auth-Email` (Portal does no login of its own).
+//! gateway-injected `X-Auth-Email` (Portal does no login of its own). The optional
+//! internal-only management section is gated by the gateway-injected `X-Gateway-Zone`.
 //!
 //! Every live number is best-effort: the data comes from a single cached, concurrent fetch of
 //! Beacon / Vitals / Watchtower ([`crate::snapshot`]). Any unreachable backend degrades its
@@ -17,7 +18,7 @@ use axum::http::HeaderMap;
 use axum::response::Html;
 
 use crate::auth;
-use crate::catalog::CatalogEntry;
+use crate::catalog::{mgmt_catalog, CatalogEntry};
 use crate::handlers::{
     esc, fmt_pct, greeting, icon_for, name_from_email, pct_width, rel_time, severity_dot_class,
     status_label, status_pill_class, APP_CSS, SHIELD_SVG,
@@ -27,15 +28,38 @@ use crate::watchtower::{Event, Verify};
 use crate::AppState;
 
 const DASHBOARD_HTML: &str = include_str!("../../templates/dashboard.html");
+const HEADER_GATEWAY_ZONE: &str = "x-gateway-zone";
+const GATEWAY_ZONE_INTERNAL: &str = "internal";
+const MGMT_SECTION_ID: &str = "infraops";
+const MGMT_SECTION_LABEL: &str = "Infrastructure & Operations";
+const MGMT_SECTION_STYLE: &str = "more";
 
 /// `GET /` — the command center. Renders for any request the gateway forwards; the signed-in
 /// email comes from the injected `X-Auth-Email`, and every live figure from the (cached)
 /// concurrent backend snapshot.
 pub async fn dashboard(State(state): State<AppState>, headers: HeaderMap) -> Html<String> {
     let email = auth::signed_in_email(&headers).unwrap_or_else(|| "operator".to_string());
+    let internal_zone = gateway_zone_internal(&headers);
     let snap = state.cache.get(&state.config).await;
     let (now_secs, hour) = clock();
-    Html(render(&state.config.catalog, &email, &snap, now_secs, hour))
+    Html(render(
+        &state.config.catalog,
+        internal_zone,
+        &email,
+        &snap,
+        now_secs,
+        hour,
+    ))
+}
+
+fn gateway_zone_internal(headers: &HeaderMap) -> bool {
+    matches!(
+        headers
+            .get(HEADER_GATEWAY_ZONE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim),
+        Some(GATEWAY_ZONE_INTERNAL)
+    )
 }
 
 /// Current epoch seconds + the local-ish hour-of-day (UTC) for the greeting.
@@ -50,6 +74,7 @@ fn clock() -> (i64, u32) {
 
 fn render(
     catalog: &[CatalogEntry],
+    internal_zone: bool,
     email: &str,
     snap: &Snapshot,
     now_secs: i64,
@@ -57,6 +82,9 @@ fn render(
 ) -> String {
     let name = name_from_email(email);
     let initial = name.chars().next().unwrap_or('H').to_uppercase().to_string();
+    let mgmt = if internal_zone { Some(mgmt_catalog()) } else { None };
+    let sidebar_nav = render_sidebar_nav(catalog, mgmt.as_deref());
+    let sections = render_dashboard_sections(catalog, mgmt.as_deref(), snap);
     DASHBOARD_HTML
         .replace("{{CSS}}", APP_CSS)
         .replace("{{SHIELD}}", SHIELD_SVG)
@@ -66,16 +94,16 @@ fn render(
         .replace("{{HEALTH_CHIP}}", &health_chip(snap))
         .replace("{{GREETING_WORD}}", greeting(hour))
         .replace("{{HERO_SUB}}", &hero_sub(snap))
-        .replace("{{SIDEBAR_NAV}}", &render_sidebar_nav(catalog))
+        .replace("{{SIDEBAR_NAV}}", &sidebar_nav)
         .replace("{{METRICS}}", &render_metrics(snap))
-        .replace("{{SECTIONS}}", &render_sections(catalog, snap))
+        .replace("{{SECTIONS}}", &sections)
         .replace("{{ACTIVITY}}", &render_activity(&snap.events, now_secs))
 }
 
 /// The sidebar catalog nav: one item per non-empty category (in [`SECTION_ORDER`]), with an
 /// accent dot and a live app-count badge. The `data-spy` key matches the section element id so
 /// the client-side scroll-spy can highlight the active section.
-fn render_sidebar_nav(catalog: &[CatalogEntry]) -> String {
+fn render_sidebar_nav(catalog: &[CatalogEntry], mgmt: Option<&[CatalogEntry]>) -> String {
     let mut out = String::new();
     for (key, label) in SECTION_ORDER {
         let count = catalog
@@ -91,6 +119,17 @@ fn render_sidebar_nav(catalog: &[CatalogEntry]) -> String {
             label = esc(label),
             count = count,
         ));
+    }
+    if let Some(mgmt) = mgmt {
+        if !mgmt.is_empty() {
+            out.push_str(&format!(
+                r##"<a class="nav__item" href="#{key}" data-spy="{key}"><span class="nav__dot nav__dot--{style}"></span><span class="nav__text">{label}</span><span class="nav__count">{count}</span></a>"##,
+                key = MGMT_SECTION_ID,
+                style = MGMT_SECTION_STYLE,
+                label = esc(MGMT_SECTION_LABEL),
+                count = mgmt.len(),
+            ));
+        }
     }
     out
 }
@@ -302,17 +341,50 @@ fn render_sections(catalog: &[CatalogEntry], snap: &Snapshot) -> String {
         if apps.is_empty() {
             continue;
         }
-        out.push_str(&format!(
-            r#"<section class="appsec appsec--{key}" id="{key}" data-section><h2 class="appsec__title"><span class="pip"></span><span class="nm">{label}</span><span class="ct">{count} apps</span><span class="ln"></span></h2><div class="appgrid">"#,
-            key = key,
-            label = esc(label),
-            count = apps.len(),
-        ));
-        for entry in apps {
-            out.push_str(&render_app(entry, key, snap));
-        }
-        out.push_str("</div></section>");
+        out.push_str(&render_app_section(key, key, label, &apps, snap));
     }
+    out
+}
+
+fn render_dashboard_sections(
+    catalog: &[CatalogEntry],
+    mgmt: Option<&[CatalogEntry]>,
+    snap: &Snapshot,
+) -> String {
+    let mut out = render_sections(catalog, snap);
+    if let Some(mgmt) = mgmt {
+        if !mgmt.is_empty() {
+            let apps: Vec<&CatalogEntry> = mgmt.iter().collect();
+            out.push_str(&render_app_section(
+                MGMT_SECTION_ID,
+                MGMT_SECTION_STYLE,
+                MGMT_SECTION_LABEL,
+                &apps,
+                snap,
+            ));
+        }
+    }
+    out
+}
+
+fn render_app_section(
+    section_id: &str,
+    style_key: &str,
+    label: &str,
+    apps: &[&CatalogEntry],
+    snap: &Snapshot,
+) -> String {
+    let mut out = format!(
+        r#"<section class="appsec appsec--{style}" id="{id}" data-section><h2 class="appsec__title"><span class="pip"></span><span class="nm">{label}</span><span class="ct">{count} apps</span><span class="ln"></span></h2><div class="appgrid">"#,
+        style = style_key,
+        id = section_id,
+        label = esc(label),
+        count = apps.len(),
+    );
+    for entry in apps {
+        out.push_str(&render_app(entry, style_key, snap));
+    }
+    out.push_str("</div></section>");
     out
 }
 

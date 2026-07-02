@@ -82,6 +82,48 @@ pub fn default_catalog() -> Vec<CatalogEntry> {
     ]
 }
 
+/// VPN/internal-only management consoles. These are rendered separately from the public
+/// [`default_catalog`] and only when the gateway marks the request as internal.
+pub fn mgmt_catalog() -> Vec<CatalogEntry> {
+    // (name, url, description, beacon component, icon key)
+    let e = |name: &str, url: &str, description: &str, component: &str, icon: &str| CatalogEntry {
+        name: name.to_string(),
+        url: url.to_string(),
+        description: description.to_string(),
+        component: component.to_string(),
+        icon: icon.to_string(),
+        coming_soon: false,
+    };
+    vec![
+        e("Authorization", "https://authz.w33d.xyz", "Policy decisions and service authorization controls.", "Authz", "authz"),
+        e("Directory", "https://people.w33d.xyz", "People, groups and account directory controls.", "People", "people"),
+        e("Vault", "https://vault.w33d.xyz", "Secrets, leases and encryption policy console.", "Vault", "vault"),
+        e("Audit log", "https://audit.w33d.xyz", "Tamper-evident audit search and investigation trail.", "Audit", "audit"),
+        e("Vitals", "https://vitals.w33d.xyz", "Host metrics, resource gauges and telemetry drilldown.", "Vitals", "vitals"),
+        e("Logs", "https://logs.w33d.xyz", "Centralized logs with search, filters and live tail.", "Sift", "logs"),
+        e("Traces", "https://traces.w33d.xyz", "Distributed tracing and request-path diagnostics.", "Filament", "traces"),
+        e("DNS", "https://dns.w33d.xyz", "Authoritative DNS zones, records and split-horizon controls.", "Lodestar", "dns"),
+        e("Backup", "https://backup.w33d.xyz", "Backup snapshots, retention policy and restore verification.", "Backup", "backup"),
+        e("CI", "https://ci.w33d.xyz", "Build pipelines, runs and supply-chain checks.", "Anvil", "ci"),
+        e("Deploy", "https://deploy.w33d.xyz", "Release rollout, routing and rollback controls.", "Skiff", "skiff"),
+        e("Egress", "https://egress.w33d.xyz", "Outbound proxy policy, reputation and audit controls.", "Estuary", "estuary"),
+        e("Mesh", "https://mesh.w33d.xyz", "WireGuard mesh peers, ACLs and device enrollment.", "Mycelium", "mesh"),
+        e("Edge", "https://edge.w33d.xyz", "Static edge cache, purge and asset delivery controls.", "Eddy", "edge"),
+        e("SPIFFE", "https://spiffe.w33d.xyz", "Workload identity, SVIDs and trust bundle management.", "Sigil", "sigil"),
+        e("Risk", "https://risk.w33d.xyz", "Continuous access risk scoring and session signals.", "Pulse", "pulse"),
+        e("Events", "https://events.w33d.xyz", "Durable event streams and CDC-backed routing.", "Events", "events"),
+        e("Jobs", "https://jobs.w33d.xyz", "Scheduled jobs, queues and worker run history.", "Jobs", "jobs"),
+        e("Intel", "https://intel.w33d.xyz", "Threat intel, IOC graph and reputation lookups.", "Intel", "intel"),
+        e("Guard", "https://guard.w33d.xyz", "Content moderation, policy scoring and safety verdicts.", "Warden", "guard"),
+        e("Purple", "https://purple.w33d.xyz", "Continuous validation of detections and attack simulations.", "Phantom", "phantom"),
+        e("Atlas", "https://atlas.w33d.xyz", "Internal developer portal and service catalog.", "Atlas", "atlas"),
+        e("RCA", "https://rca.w33d.xyz", "Root-cause investigations across metrics, logs and traces.", "RCA", "rca"),
+        e("Detonate", "https://detonate.w33d.xyz", "Sandboxed sample analysis, verdicts and IOC extraction.", "Crucible", "crucible"),
+        e("Canary", "https://canary.w33d.xyz", "Canary tokens, honeypots and uptime tripwires.", "Canary", "canary"),
+        e("VPN enrollment", "https://vpn.w33d.xyz", "WireGuard credential enrollment and bootstrap access.", "Mycelium", "mesh"),
+    ]
+}
+
 /// Parse a `PORTAL_CATALOG` JSON array (`[{"name","url","description"?,"component"?,
 /// "icon"?,"coming_soon"?}, ...]`).
 pub fn parse_catalog(raw: &str) -> Result<Vec<CatalogEntry>, serde_json::Error> {
@@ -124,7 +166,7 @@ mod tests {
         for host in [
             "vault", "audit", "vitals", "backup", "rca", "traces", "ci", "atlas", "guard", "mesh",
             "spiffe", "deploy", "egress", "purple", "logs", "dns", "people", "authz", "risk",
-            "intel", "canary", "edge", "events", "jobs",
+            "intel", "canary", "edge", "events", "jobs", "detonate", "vpn",
         ] {
             let url = format!("https://{host}.w33d.xyz");
             assert!(
@@ -137,6 +179,49 @@ mod tests {
         for e in &cat {
             assert!(!e.component.is_empty(), "{} has a beacon component", e.name);
             assert!(!e.icon.is_empty(), "{} has an icon", e.name);
+        }
+    }
+
+    #[test]
+    fn mgmt_catalog_is_internal_ops_consoles_only() {
+        let cat = mgmt_catalog();
+        assert_eq!(cat.len(), 26, "curated internal management catalog");
+
+        for (host, name, component) in [
+            ("authz", "Authorization", "Authz"),
+            ("people", "Directory", "People"),
+            ("vault", "Vault", "Vault"),
+            ("audit", "Audit log", "Audit"),
+            ("vitals", "Vitals", "Vitals"),
+            ("logs", "Logs", "Sift"),
+            ("traces", "Traces", "Filament"),
+            ("dns", "DNS", "Lodestar"),
+            ("backup", "Backup", "Backup"),
+            ("ci", "CI", "Anvil"),
+            ("deploy", "Deploy", "Skiff"),
+            ("egress", "Egress", "Estuary"),
+            ("mesh", "Mesh", "Mycelium"),
+            ("edge", "Edge", "Eddy"),
+            ("spiffe", "SPIFFE", "Sigil"),
+            ("risk", "Risk", "Pulse"),
+            ("events", "Events", "Events"),
+            ("jobs", "Jobs", "Jobs"),
+            ("intel", "Intel", "Intel"),
+            ("guard", "Guard", "Warden"),
+            ("purple", "Purple", "Phantom"),
+            ("atlas", "Atlas", "Atlas"),
+            ("rca", "RCA", "RCA"),
+            ("detonate", "Detonate", "Crucible"),
+            ("canary", "Canary", "Canary"),
+            ("vpn", "VPN enrollment", "Mycelium"),
+        ] {
+            let entry = cat.iter().find(|e| e.url == format!("https://{host}.w33d.xyz"));
+            let entry = entry.unwrap_or_else(|| panic!("mgmt host {host} present"));
+            assert_eq!(entry.name, name);
+            assert_eq!(entry.component, component);
+            assert!(!entry.description.is_empty(), "{name} has a description");
+            assert!(!entry.icon.is_empty(), "{name} has an icon");
+            assert!(!entry.coming_soon, "{name} is live/internal, not coming soon");
         }
     }
 

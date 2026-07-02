@@ -38,6 +38,15 @@ fn get_as(uri: &str, email: &str) -> Request<Body> {
         .unwrap()
 }
 
+fn get_as_zone(uri: &str, email: &str, zone: &str) -> Request<Body> {
+    Request::builder()
+        .uri(uri)
+        .header("X-Auth-Email", email)
+        .header("X-Gateway-Zone", zone)
+        .body(Body::empty())
+        .unwrap()
+}
+
 /// Request carrying a gateway-injected identity + groups (the admin gate reads `X-Auth-Groups`).
 fn get_as_groups(uri: &str, email: &str, groups: &str) -> Request<Body> {
     Request::builder()
@@ -212,6 +221,98 @@ async fn dashboard_renders_full_command_center() {
         html.contains("https://sso.w33d.xyz/_gw/auth/logout"),
         "logout points at the gateway"
     );
+}
+
+#[tokio::test]
+async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
+    let beacon = fake_service(&[(
+        "/api/status",
+        r#"{"overall":"degraded","updated_at":1,"components":[
+            {"name":"Authz","kind":"http","status":"operational","uptime_24h":100.0},
+            {"name":"Mycelium","kind":"http","status":"degraded","uptime_24h":97.0}
+        ],"incidents":[]}"#,
+    )])
+    .await;
+    let state = state_with(&beacon, "http://127.0.0.1:1", "http://127.0.0.1:1");
+
+    let (status, html) = call(&state, get_as_zone("/", "alice@holdfast.local", "internal")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    assert!(
+        html.contains(r##"href="#infraops" data-spy="infraops""##),
+        "internal sidebar links to the mgmt section"
+    );
+    assert!(
+        html.contains(r#"id="infraops" data-section"#),
+        "internal mgmt section rendered"
+    );
+    assert!(
+        html.contains("Infrastructure &amp; Operations"),
+        "mgmt section title is escaped and visible"
+    );
+    assert!(html.contains("26 apps"), "all internal consoles are in one section");
+
+    for (name, url) in [
+        ("Authorization", "https://authz.w33d.xyz"),
+        ("Directory", "https://people.w33d.xyz"),
+        ("Vault", "https://vault.w33d.xyz"),
+        ("Audit log", "https://audit.w33d.xyz"),
+        ("Logs", "https://logs.w33d.xyz"),
+        ("Traces", "https://traces.w33d.xyz"),
+        ("DNS", "https://dns.w33d.xyz"),
+        ("Deploy", "https://deploy.w33d.xyz"),
+        ("Egress", "https://egress.w33d.xyz"),
+        ("SPIFFE", "https://spiffe.w33d.xyz"),
+        ("Purple", "https://purple.w33d.xyz"),
+        ("Detonate", "https://detonate.w33d.xyz"),
+        ("VPN enrollment", "https://vpn.w33d.xyz"),
+    ] {
+        assert!(html.contains(name), "{name} mgmt tile rendered");
+        assert!(html.contains(url), "{name} links to {url}");
+    }
+
+    assert!(
+        html.contains(r#"data-app-id="https://vpn.w33d.xyz""#),
+        "mgmt tiles participate in launcher JS"
+    );
+    assert!(
+        html.contains(r#"title="Operational""#),
+        "Authz component status maps through Beacon"
+    );
+    assert!(
+        html.contains(r#"title="Degraded""#),
+        "Mycelium component status maps through Beacon"
+    );
+}
+
+#[tokio::test]
+async fn dashboard_public_gateway_zone_is_byte_identical_without_mgmt() {
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1");
+
+    let (missing_status, missing) = call(&state, get_as("/", "eve@holdfast.local")).await;
+    let (external_status, external) =
+        call(&state, get_as_zone("/", "eve@holdfast.local", "external")).await;
+    let (wrong_case_status, wrong_case) =
+        call(&state, get_as_zone("/", "eve@holdfast.local", "Internal")).await;
+
+    assert_eq!(missing_status, StatusCode::OK);
+    assert_eq!(external_status, StatusCode::OK);
+    assert_eq!(wrong_case_status, StatusCode::OK);
+    assert_eq!(external, missing, "external zone is byte-identical to the public view");
+    assert_eq!(
+        wrong_case, missing,
+        "only the exact internal zone value unlocks mgmt consoles"
+    );
+
+    for forbidden in [
+        "Infrastructure &amp; Operations",
+        "https://authz.w33d.xyz",
+        "https://vault.w33d.xyz",
+        "https://vpn.w33d.xyz",
+        r##"href="#infraops" data-spy="infraops""##,
+    ] {
+        assert!(!missing.contains(forbidden), "{forbidden} is absent from public dashboard");
+    }
 }
 
 #[tokio::test]
