@@ -190,6 +190,16 @@ async fn dashboard_renders_full_command_center() {
     // Mail is LIVE now — no Coming-soon tile should remain.
     assert!(!html.contains(">Soon<"), "no coming-soon tiles in the default catalog");
 
+    // Client-side launcher enhancements stay front-end only: stable tile ids, star controls,
+    // a personal-apps mount, and an accessible command-palette shell.
+    assert!(html.contains(r#"id="personalapps""#), "personal apps mount rendered");
+    assert!(html.contains(r#"id="cmdpalette" role="dialog""#), "command palette dialog shell");
+    assert!(html.contains(r#"aria-modal="true""#), "command palette is modal");
+    assert!(html.contains("holdfast.portal.pinnedApps.v1"), "pinned apps use namespaced localStorage");
+    assert!(html.contains("holdfast.portal.recentApps.v1"), "recent apps use namespaced localStorage");
+    assert!(html.contains(r#"data-app-id="https://mail.w33d.xyz""#), "tiles expose stable app ids");
+    assert!(html.contains(r#"data-pin-button data-app-id="https://mail.w33d.xyz""#), "tiles include a pin control");
+
     // Recent-activity feed from Watchtower.
     assert!(html.contains("login"), "activity feed shows the action");
     assert!(

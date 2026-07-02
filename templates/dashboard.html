@@ -100,6 +100,8 @@
           <p class="lede">{{HERO_SUB}}</p>
         </div>
 
+        <div class="personalapps" id="personalapps" aria-live="polite"></div>
+
         <div id="appsections">
           {{SECTIONS}}
         </div>
@@ -129,6 +131,25 @@
     </div>
   </div>
   <div class="scrim" id="scrim" hidden></div>
+  <div class="palette" id="cmdpalette" role="dialog" aria-modal="true" aria-labelledby="cmdtitle" hidden>
+    <div class="palette__panel">
+      <div class="palette__head">
+        <div class="palette__field">
+          <svg class="palette__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="cmdinput" class="palette__input" type="search" autocomplete="off" aria-controls="cmdresults" aria-activedescendant="" aria-label="Search apps" placeholder="Search apps or commands">
+        </div>
+        <button class="palette__close iconbtn" id="cmdclose" type="button" aria-label="Close command palette">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="palette__meta">
+        <h2 id="cmdtitle">Launch app</h2>
+        <span>Catalog</span>
+      </div>
+      <div class="palette__list" id="cmdresults" role="listbox" aria-label="Applications"></div>
+      <div class="palette__empty" id="cmdempty" hidden>No apps match your search.</div>
+    </div>
+  </div>
 
   <script>
   (function () {
@@ -137,11 +158,27 @@
         scrim = document.getElementById('scrim');
     function setMenu(open) {
       document.body.classList.toggle('nav-open', open);
-      scrim.hidden = !open;
+      if (scrim) scrim.hidden = !open;
       if (burger) burger.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
     if (burger) burger.addEventListener('click', function () { setMenu(!document.body.classList.contains('nav-open')); });
     if (scrim) scrim.addEventListener('click', function () { setMenu(false); });
+
+    function textOf(el) {
+      return el ? (el.textContent || '').trim() : '';
+    }
+    function closest(el, selector) {
+      while (el && el !== document) {
+        if (el.matches && el.matches(selector)) return el;
+        el = el.parentNode;
+      }
+      return null;
+    }
+    function isEditable(el) {
+      if (!el) return false;
+      var tag = (el.tagName || '').toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+    }
 
     // Search: filter app cards by name+description, hide emptied sections.
     var box = document.getElementById('appsearch'),
@@ -153,7 +190,8 @@
         var shown = 0;
         sec.querySelectorAll('.app').forEach(function (a) {
           var hit = !q || (a.getAttribute('data-name') || '').indexOf(q) !== -1;
-          a.style.display = hit ? '' : 'none';
+          var tile = closest(a, '.appwrap') || a;
+          tile.style.display = hit ? '' : 'none';
           if (hit) shown++;
         });
         sec.style.display = shown ? '' : 'none';
@@ -164,10 +202,345 @@
     if (box) {
       box.addEventListener('input', applySearch);
       box.addEventListener('keydown', function (e) { if (e.key === 'Escape') { box.value = ''; applySearch(); box.blur(); } });
-      document.addEventListener('keydown', function (e) {
-        if (e.key === '/' && document.activeElement !== box) { e.preventDefault(); box.focus(); }
+    }
+
+    // Personal launcher state is local-only: no Store, database, or backend mutations.
+    var pinnedKey = 'holdfast.portal.pinnedApps.v1',
+        recentKey = 'holdfast.portal.recentApps.v1',
+        recentLimit = 6,
+        personal = document.getElementById('personalapps'),
+        palette = document.getElementById('cmdpalette'),
+        paletteInput = document.getElementById('cmdinput'),
+        paletteResults = document.getElementById('cmdresults'),
+        paletteEmpty = document.getElementById('cmdempty'),
+        paletteClose = document.getElementById('cmdclose'),
+        paletteOpen = false,
+        paletteIndex = 0,
+        paletteMatches = [],
+        previousFocus = null;
+
+    var apps = Array.prototype.slice.call(document.querySelectorAll('#appsections .app')).map(function (link, index) {
+      var name = textOf(link.querySelector('.app__name')),
+          desc = textOf(link.querySelector('.app__desc')),
+          cls = link.getAttribute('class') || '';
+      return {
+        id: link.getAttribute('data-app-id') || link.getAttribute('href') || link.href,
+        href: link.getAttribute('href') || link.href,
+        name: name,
+        desc: desc,
+        text: (name + ' ' + desc).toLowerCase(),
+        className: cls,
+        link: link,
+        order: index
+      };
+    }).filter(function (app) { return app.id && app.href && app.name; });
+
+    function findApp(id) {
+      for (var i = 0; i < apps.length; i++) {
+        if (apps[i].id === id) return apps[i];
+      }
+      return null;
+    }
+    function readList(key) {
+      try {
+        var parsed = JSON.parse(window.localStorage.getItem(key) || '[]');
+        return Array.isArray(parsed) ? parsed.filter(function (id) { return typeof id === 'string'; }) : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    function writeList(key, ids) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(ids));
+      } catch (_) {}
+    }
+    function knownIds(ids, limit) {
+      var seen = {}, out = [];
+      ids.forEach(function (id) {
+        if (!seen[id] && findApp(id)) {
+          seen[id] = true;
+          out.push(id);
+        }
+      });
+      return typeof limit === 'number' ? out.slice(0, limit) : out;
+    }
+    var pinnedIds = knownIds(readList(pinnedKey)),
+        recentIds = knownIds(readList(recentKey), recentLimit);
+
+    function createStarIcon() {
+      var ns = 'http://www.w3.org/2000/svg',
+          svg = document.createElementNS(ns, 'svg'),
+          path = document.createElementNS(ns, 'path');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('focusable', 'false');
+      path.setAttribute('d', 'm12 3 2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3Z');
+      svg.appendChild(path);
+      return svg;
+    }
+    function createPinButton(app) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'app__pin';
+      btn.setAttribute('data-pin-button', '');
+      btn.setAttribute('data-app-id', app.id);
+      btn.setAttribute('aria-pressed', 'false');
+      btn.appendChild(createStarIcon());
+      return btn;
+    }
+    function syncPinButtons() {
+      Array.prototype.slice.call(document.querySelectorAll('[data-pin-button]')).forEach(function (btn) {
+        var app = findApp(btn.getAttribute('data-app-id'));
+        if (!app) return;
+        var pinned = pinnedIds.indexOf(app.id) !== -1,
+            label = (pinned ? 'Unpin ' : 'Pin ') + app.name;
+        btn.classList.toggle('is-pinned', pinned);
+        btn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+        btn.setAttribute('aria-label', label);
+        btn.setAttribute('title', label);
       });
     }
+    function createQuickTile(app) {
+      var wrap = document.createElement('div'),
+          link = document.createElement('a'),
+          soon = app.link.querySelector('.app__soon'),
+          status = app.link.querySelector('.app__status'),
+          icon = app.link.querySelector('.app__icon'),
+          name = document.createElement('span'),
+          desc = document.createElement('span');
+      wrap.className = 'appwrap appwrap--compact';
+      wrap.setAttribute('data-app-id', app.id);
+      link.className = app.className + ' app--compact';
+      link.href = app.href;
+      link.setAttribute('data-app-id', app.id);
+      link.setAttribute('data-name', app.text);
+      if (soon) link.appendChild(soon.cloneNode(true));
+      if (status) link.appendChild(status.cloneNode(true));
+      if (icon) link.appendChild(icon.cloneNode(true));
+      name.className = 'app__name';
+      name.textContent = app.name;
+      desc.className = 'app__desc';
+      desc.textContent = app.desc;
+      link.appendChild(name);
+      link.appendChild(desc);
+      wrap.appendChild(link);
+      wrap.appendChild(createPinButton(app));
+      return wrap;
+    }
+    function sectionTitle(label, count, recent) {
+      var title = document.createElement('h2'),
+          pip = document.createElement('span'),
+          nm = document.createElement('span'),
+          ct = document.createElement('span'),
+          ln = document.createElement('span');
+      title.className = 'quicksec__title';
+      pip.className = 'pip';
+      nm.className = 'nm';
+      nm.textContent = label;
+      ct.className = 'ct';
+      ct.textContent = recent ? 'Last ' + count : count + (count === 1 ? ' app' : ' apps');
+      ln.className = 'ln';
+      title.appendChild(pip);
+      title.appendChild(nm);
+      title.appendChild(ct);
+      title.appendChild(ln);
+      return title;
+    }
+    function createQuickSection(id, label, ids, recent) {
+      var sec = document.createElement('section'),
+          grid = document.createElement('div');
+      sec.className = 'quicksec' + (recent ? ' quicksec--recent' : '');
+      sec.id = id;
+      sec.setAttribute('aria-label', label);
+      grid.className = 'quickgrid' + (recent ? ' quickgrid--strip' : '');
+      ids.forEach(function (appId) {
+        var app = findApp(appId);
+        if (app) grid.appendChild(createQuickTile(app));
+      });
+      sec.appendChild(sectionTitle(label, ids.length, recent));
+      sec.appendChild(grid);
+      return sec;
+    }
+    function renderPersonalApps() {
+      if (!personal) return;
+      pinnedIds = knownIds(pinnedIds);
+      recentIds = knownIds(recentIds, recentLimit);
+      while (personal.firstChild) personal.removeChild(personal.firstChild);
+      if (pinnedIds.length) personal.appendChild(createQuickSection('pinnedapps', 'Pinned', pinnedIds, false));
+      if (recentIds.length) personal.appendChild(createQuickSection('recentapps', 'Recent', recentIds, true));
+      syncPinButtons();
+    }
+    function togglePin(id) {
+      var next = pinnedIds.slice(),
+          at = next.indexOf(id);
+      if (!findApp(id)) return;
+      if (at === -1) next.unshift(id);
+      else next.splice(at, 1);
+      pinnedIds = knownIds(next);
+      writeList(pinnedKey, pinnedIds);
+      renderPersonalApps();
+    }
+    function recordRecent(id) {
+      if (!findApp(id)) return;
+      recentIds = knownIds([id].concat(recentIds.filter(function (old) { return old !== id; })), recentLimit);
+      writeList(recentKey, recentIds);
+      renderPersonalApps();
+    }
+
+    function fuzzyScore(query, text) {
+      var q = query.toLowerCase(), qi = 0, last = -2, score = 0, exact, i;
+      if (!q) return 1;
+      exact = text.indexOf(q);
+      if (exact !== -1) return 1000 - exact;
+      for (i = 0; i < text.length && qi < q.length; i++) {
+        if (text.charAt(i) === q.charAt(qi)) {
+          score += (i === last + 1) ? 8 : 3;
+          last = i;
+          qi++;
+        }
+      }
+      return qi === q.length ? score : -1;
+    }
+    function searchApps(query) {
+      return apps.map(function (app) {
+        return { app: app, score: fuzzyScore(query, app.text) };
+      }).filter(function (match) {
+        return match.score >= 0;
+      }).sort(function (a, b) {
+        return (b.score - a.score) || (a.app.order - b.app.order);
+      });
+    }
+    function updatePaletteSelection() {
+      var items = Array.prototype.slice.call(paletteResults ? paletteResults.querySelectorAll('.palette__item') : []);
+      items.forEach(function (item, index) {
+        var active = index === paletteIndex;
+        item.classList.toggle('is-active', active);
+        item.setAttribute('aria-selected', active ? 'true' : 'false');
+        if (active && paletteInput) {
+          paletteInput.setAttribute('aria-activedescendant', item.id);
+          item.scrollIntoView({ block: 'nearest' });
+        }
+      });
+      if (!items.length && paletteInput) paletteInput.setAttribute('aria-activedescendant', '');
+    }
+    function renderPalette() {
+      if (!paletteResults || !paletteInput || !paletteEmpty) return;
+      var query = (paletteInput.value || '').trim();
+      paletteMatches = searchApps(query);
+      if (paletteIndex >= paletteMatches.length) paletteIndex = Math.max(0, paletteMatches.length - 1);
+      while (paletteResults.firstChild) paletteResults.removeChild(paletteResults.firstChild);
+      paletteMatches.forEach(function (match, index) {
+        var app = match.app,
+            item = document.createElement('a'),
+            icon = app.link.querySelector('.app__icon'),
+            body = document.createElement('span'),
+            name = document.createElement('span'),
+            desc = document.createElement('span');
+        item.id = 'cmdoption-' + index;
+        item.className = 'palette__item';
+        item.href = app.href;
+        item.setAttribute('role', 'option');
+        item.setAttribute('data-app-id', app.id);
+        if (icon) item.appendChild(icon.cloneNode(true));
+        body.className = 'palette__copy';
+        name.className = 'palette__name';
+        name.textContent = app.name;
+        desc.className = 'palette__desc';
+        desc.textContent = app.desc;
+        body.appendChild(name);
+        body.appendChild(desc);
+        item.appendChild(body);
+        item.addEventListener('mouseenter', function () {
+          paletteIndex = index;
+          updatePaletteSelection();
+        });
+        item.addEventListener('click', function () { closePalette(false); });
+        paletteResults.appendChild(item);
+      });
+      paletteEmpty.hidden = paletteMatches.length !== 0;
+      updatePaletteSelection();
+    }
+    function openPalette(seed) {
+      if (!palette || !paletteInput) return;
+      previousFocus = document.activeElement;
+      palette.hidden = false;
+      paletteOpen = true;
+      paletteIndex = 0;
+      paletteInput.value = seed || '';
+      document.body.classList.add('palette-open');
+      renderPalette();
+      window.setTimeout(function () {
+        paletteInput.focus();
+        paletteInput.select();
+      }, 0);
+    }
+    function closePalette(restoreFocus) {
+      if (!palette) return;
+      palette.hidden = true;
+      paletteOpen = false;
+      document.body.classList.remove('palette-open');
+      if (restoreFocus && previousFocus && previousFocus.focus) previousFocus.focus();
+    }
+    function selectedPaletteApp() {
+      return paletteMatches[paletteIndex] && paletteMatches[paletteIndex].app;
+    }
+    function goSelectedPaletteApp() {
+      var app = selectedPaletteApp();
+      if (!app) return;
+      recordRecent(app.id);
+      window.location.href = app.href;
+    }
+    function trapPaletteTab(e) {
+      var focusable = Array.prototype.slice.call(palette.querySelectorAll('input, button, a[href]')).filter(function (el) {
+            return !el.disabled && el.offsetParent !== null;
+          }),
+          first = focusable[0],
+          last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    if (paletteInput) paletteInput.addEventListener('input', function () { paletteIndex = 0; renderPalette(); });
+    if (paletteClose) paletteClose.addEventListener('click', function () { closePalette(true); });
+    if (palette) palette.addEventListener('click', function (e) { if (e.target === palette) closePalette(true); });
+    document.addEventListener('click', function (e) {
+      var pin = closest(e.target, '[data-pin-button]'),
+          appLink;
+      if (pin) {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePin(pin.getAttribute('data-app-id'));
+        return;
+      }
+      appLink = closest(e.target, 'a.app[data-app-id], a.palette__item[data-app-id]');
+      if (appLink) recordRecent(appLink.getAttribute('data-app-id'));
+    });
+    document.addEventListener('keydown', function (e) {
+      var key = e.key || '';
+      if (paletteOpen) {
+        if (key === 'Escape') { e.preventDefault(); closePalette(true); return; }
+        if (key === 'ArrowDown') { e.preventDefault(); paletteIndex = Math.min(paletteIndex + 1, Math.max(0, paletteMatches.length - 1)); updatePaletteSelection(); return; }
+        if (key === 'ArrowUp') { e.preventDefault(); paletteIndex = Math.max(0, paletteIndex - 1); updatePaletteSelection(); return; }
+        if (key === 'Enter' && document.activeElement !== paletteClose && !closest(document.activeElement, 'a.palette__item')) { e.preventDefault(); goSelectedPaletteApp(); return; }
+        if (key === 'Tab') trapPaletteTab(e);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openPalette('');
+        return;
+      }
+      if (key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditable(document.activeElement)) {
+        e.preventDefault();
+        openPalette('');
+      }
+    });
+    renderPersonalApps();
 
     // Nav: smooth scroll + scroll-spy active state.
     var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav__item[data-spy]'));

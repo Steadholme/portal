@@ -335,14 +335,22 @@ fn render_app(entry: &CatalogEntry, cat_key: &str, snap: &Snapshot) -> String {
     };
     // Lowercased name+description backs the client-side app search filter.
     let data_name = esc(&format!("{} {}", entry.name, entry.description).to_lowercase());
+    let app_id = esc(&entry.url);
+    let pin_label = esc(&format!("Pin {}", entry.name));
     format!(
-        r#"<a class="app app--{cat}" href="{url}" data-name="{dn}">
+        r#"<div class="appwrap" data-app-id="{id}">
+<a class="app app--{cat}" href="{url}" data-name="{dn}" data-app-id="{id}">
   {soon}
   <span class="app__status {dot}" title="{title}" aria-label="{title}"></span>
   <span class="app__icon" aria-hidden="true">{icon}</span>
   <span class="app__name">{name}</span>
   <span class="app__desc">{desc}</span>
-</a>"#,
+</a>
+<button class="app__pin" type="button" data-pin-button data-app-id="{id}" aria-pressed="false" aria-label="{pin_label}" title="{pin_label}">
+  {pin_icon}
+</button>
+</div>"#,
+        id = app_id,
         cat = cat_key,
         url = esc(&entry.url),
         dn = data_name,
@@ -352,6 +360,8 @@ fn render_app(entry: &CatalogEntry, cat_key: &str, snap: &Snapshot) -> String {
         icon = icon_for(&entry.name, &entry.icon),
         name = esc(&entry.name),
         desc = esc(&entry.description),
+        pin_label = pin_label,
+        pin_icon = ICON_STAR,
     )
 }
 
@@ -407,3 +417,4 @@ const ICON_CPU: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentC
 const ICON_MEM: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M12 10v4M17 10v4"/></svg>"##;
 const ICON_AUDIT: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>"##;
 const ICON_LOAD: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M12 4V2M4 12H2M12 20v2M20 12h2M6 6 4.5 4.5M18 6l1.5-1.5"/><path d="m12 10 4-2"/></svg>"##;
+const ICON_STAR: &str = r##"<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 3 2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3Z"/></svg>"##;
