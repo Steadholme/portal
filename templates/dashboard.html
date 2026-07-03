@@ -80,11 +80,11 @@
           <strong>App Portal</strong>
           <span>Dashboard</span>
         </div>
-        <div class="search" role="search">
+        <form class="search" role="search" method="get" action="/">
           <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <input id="appsearch" type="search" placeholder="Search your apps" autocomplete="off" aria-label="Search your apps">
+          <input id="appsearch" name="q" value="{{SEARCH_VALUE}}" type="search" placeholder="Search your apps" autocomplete="off" aria-label="Search your apps">
           <kbd class="search__kbd">/</kbd>
-        </div>
+        </form>
         <div class="topbar__right">
           {{HEALTH_CHIP}}
           <a class="iconbtn" href="https://notify.w33d.xyz" title="Notifications" aria-label="Notifications">
@@ -94,13 +94,20 @@
       </header>
 
       <div class="content" id="top">
+        {{INCIDENT_BANNER}}
+
         <div class="pagehead">
           <p class="kicker">Sovereign Cloud Console</p>
           <h1>{{GREETING_WORD}}, <span class="grad">{{NAME}}</span></h1>
           <p class="lede">{{HERO_SUB}}</p>
         </div>
 
-        <div class="personalapps" id="personalapps" aria-live="polite"></div>
+        <div class="personalapps" id="personalapps" aria-live="polite">
+          <section class="quicksec quicksec--empty" id="pinnedapps" aria-label="Pinned">
+            <h2 class="quicksec__title"><span class="pip"></span><span class="nm">Pinned</span><span class="ln"></span></h2>
+            <p class="quicksec__hint">Star an app to pin it here — your favourites stay on top.</p>
+          </section>
+        </div>
 
         <div id="appsections">
           {{SECTIONS}}
@@ -202,6 +209,7 @@
     if (box) {
       box.addEventListener('input', applySearch);
       box.addEventListener('keydown', function (e) { if (e.key === 'Escape') { box.value = ''; applySearch(); box.blur(); } });
+      if (box.form) box.form.addEventListener('submit', function (e) { e.preventDefault(); applySearch(); });
     }
 
     // Personal launcher state is local-only: no Store, database, or backend mutations.
@@ -312,6 +320,7 @@
       wrap.setAttribute('data-app-id', app.id);
       link.className = app.className + ' app--compact';
       link.href = app.href;
+      link.title = app.desc ? app.name + ' — ' + app.desc : app.name;
       link.setAttribute('data-app-id', app.id);
       link.setAttribute('data-name', app.text);
       if (soon) link.appendChild(soon.cloneNode(true));
@@ -338,11 +347,13 @@
       nm.className = 'nm';
       nm.textContent = label;
       ct.className = 'ct';
-      ct.textContent = recent ? 'Last ' + count : count + (count === 1 ? ' app' : ' apps');
       ln.className = 'ln';
       title.appendChild(pip);
       title.appendChild(nm);
-      title.appendChild(ct);
+      if (typeof count === 'number') {
+        ct.textContent = recent ? 'Last ' + count : count + (count === 1 ? ' app' : ' apps');
+        title.appendChild(ct);
+      }
       title.appendChild(ln);
       return title;
     }
@@ -361,12 +372,25 @@
       sec.appendChild(grid);
       return sec;
     }
+    function createEmptyPinned() {
+      var sec = document.createElement('section'),
+          hint = document.createElement('p');
+      sec.className = 'quicksec quicksec--empty';
+      sec.id = 'pinnedapps';
+      sec.setAttribute('aria-label', 'Pinned');
+      hint.className = 'quicksec__hint';
+      hint.textContent = 'Star an app to pin it here — your favourites stay on top.';
+      sec.appendChild(sectionTitle('Pinned'));
+      sec.appendChild(hint);
+      return sec;
+    }
     function renderPersonalApps() {
       if (!personal) return;
       pinnedIds = knownIds(pinnedIds);
       recentIds = knownIds(recentIds, recentLimit);
       while (personal.firstChild) personal.removeChild(personal.firstChild);
       if (pinnedIds.length) personal.appendChild(createQuickSection('pinnedapps', 'Pinned', pinnedIds, false));
+      else personal.appendChild(createEmptyPinned());
       if (recentIds.length) personal.appendChild(createQuickSection('recentapps', 'Recent', recentIds, true));
       syncPinButtons();
     }
@@ -537,7 +561,10 @@
       }
       if (key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditable(document.activeElement)) {
         e.preventDefault();
-        openPalette('');
+        if (box) {
+          box.focus();
+          box.select();
+        }
       }
     });
     renderPersonalApps();

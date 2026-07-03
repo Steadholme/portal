@@ -13,9 +13,10 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::Html;
+use serde::Deserialize;
 
 use crate::auth;
 use crate::catalog::{mgmt_catalog, CatalogEntry};
@@ -34,10 +35,20 @@ const MGMT_SECTION_ID: &str = "infraops";
 const MGMT_SECTION_LABEL: &str = "Infrastructure & Operations";
 const MGMT_SECTION_STYLE: &str = "more";
 
+#[derive(Deserialize, Default)]
+pub struct DashQuery {
+    #[serde(default)]
+    q: String,
+}
+
 /// `GET /` — the command center. Renders for any request the gateway forwards; the signed-in
 /// email comes from the injected `X-Auth-Email`, and every live figure from the (cached)
 /// concurrent backend snapshot.
-pub async fn dashboard(State(state): State<AppState>, headers: HeaderMap) -> Html<String> {
+pub async fn dashboard(
+    State(state): State<AppState>,
+    Query(query): Query<DashQuery>,
+    headers: HeaderMap,
+) -> Html<String> {
     let email = auth::signed_in_email(&headers).unwrap_or_else(|| "operator".to_string());
     let internal_zone = gateway_zone_internal(&headers);
     let snap = state.cache.get(&state.config).await;
@@ -49,6 +60,7 @@ pub async fn dashboard(State(state): State<AppState>, headers: HeaderMap) -> Htm
         &snap,
         now_secs,
         hour,
+        query.q.trim(),
     ))
 }
 
@@ -79,12 +91,41 @@ fn render(
     snap: &Snapshot,
     now_secs: i64,
     hour: u32,
+    search_query: &str,
 ) -> String {
     let name = name_from_email(email);
-    let initial = name.chars().next().unwrap_or('H').to_uppercase().to_string();
-    let mgmt = if internal_zone { Some(mgmt_catalog()) } else { None };
-    let sidebar_nav = render_sidebar_nav(catalog, mgmt.as_deref());
-    let sections = render_dashboard_sections(catalog, mgmt.as_deref(), snap);
+    let initial = name
+        .chars()
+        .next()
+        .unwrap_or('H')
+        .to_uppercase()
+        .to_string();
+    let q = search_query.trim();
+    let q_lower = q.to_lowercase();
+    let filtered_catalog = if q.is_empty() {
+        None
+    } else {
+        Some(filter_catalog(catalog, &q_lower))
+    };
+    let catalog = filtered_catalog.as_deref().unwrap_or(catalog);
+    let mgmt = if internal_zone {
+        Some(mgmt_catalog())
+    } else {
+        None
+    };
+    let filtered_mgmt = if q.is_empty() {
+        None
+    } else {
+        mgmt.as_deref()
+            .map(|entries| filter_catalog(entries, &q_lower))
+    };
+    let mgmt = if q.is_empty() {
+        mgmt.as_deref()
+    } else {
+        filtered_mgmt.as_deref()
+    };
+    let sidebar_nav = render_sidebar_nav(catalog, mgmt);
+    let sections = render_dashboard_sections(catalog, mgmt, snap, q);
     DASHBOARD_HTML
         .replace("{{CSS}}", APP_CSS)
         .replace("{{SHIELD}}", SHIELD_SVG)
@@ -98,6 +139,8 @@ fn render(
         .replace("{{METRICS}}", &render_metrics(snap))
         .replace("{{SECTIONS}}", &sections)
         .replace("{{ACTIVITY}}", &render_activity(&snap.events, now_secs))
+        .replace("{{INCIDENT_BANNER}}", &incident_banner(snap))
+        .replace("{{SEARCH_VALUE}}", &esc(q))
 }
 
 /// The sidebar catalog nav: one item per non-empty category (in [`SECTION_ORDER`]), with an
@@ -105,14 +148,8 @@ fn render(
 /// the client-side scroll-spy can highlight the active section.
 fn render_sidebar_nav(catalog: &[CatalogEntry], mgmt: Option<&[CatalogEntry]>) -> String {
     let mut out = String::new();
-    for (key, label) in SECTION_ORDER {
-        let count = catalog
-            .iter()
-            .filter(|e| category_key(&e.name) == *key)
-            .count();
-        if count == 0 {
-            continue;
-        }
+    for (key, label, apps) in grouped_catalog(catalog) {
+        let count = apps.len();
         out.push_str(&format!(
             r##"<a class="nav__item" href="#{key}" data-spy="{key}"><span class="nav__dot nav__dot--{key}"></span><span class="nav__text">{label}</span><span class="nav__count">{count}</span></a>"##,
             key = key,
@@ -151,6 +188,46 @@ fn health_chip(snap: &Snapshot) -> String {
     }
 }
 
+fn incident_banner(snap: &Snapshot) -> String {
+    let s = &snap.statuses;
+    if !s.reached || s.total == 0 || s.up >= s.total {
+        return String::new();
+    }
+    let issues: Vec<_> = s
+        .components
+        .iter()
+        .filter(|c| c.status != "operational")
+        .collect();
+    let names = issues
+        .iter()
+        .take(3)
+        .map(|c| esc(&c.name))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = if issues.len() > 3 {
+        format!(" +{} more", issues.len() - 3)
+    } else {
+        String::new()
+    };
+    let variant = if issues.iter().any(|c| c.status == "down") {
+        "incidentbar--down"
+    } else {
+        "incidentbar--warn"
+    };
+    format!(
+        r#"<div class="incidentbar {variant}" role="status">
+  <span class="incidentbar__dot" aria-hidden="true"></span>
+  <p class="incidentbar__text"><strong>{affected} of {total} systems</strong> reporting issues: {names}{more}</p>
+  <a class="incidentbar__link" href="https://status.w33d.xyz">View status &rarr;</a>
+</div>"#,
+        variant = variant,
+        affected = s.total - s.up,
+        total = s.total,
+        names = names,
+        more = more,
+    )
+}
+
 /// One-line live summary under the greeting.
 fn hero_sub(snap: &Snapshot) -> String {
     let mut parts: Vec<String> = Vec::new();
@@ -181,8 +258,16 @@ fn render_metrics(snap: &Snapshot) -> String {
         "—".to_string()
     };
     let systems_foot = if s.reached && s.total > 0 {
-        let cls = if s.up == s.total { "tag tag-ok" } else { "tag tag-warn" };
-        let word = if s.up == s.total { "All operational" } else { "Degraded" };
+        let cls = if s.up == s.total {
+            "tag tag-ok"
+        } else {
+            "tag tag-warn"
+        };
+        let word = if s.up == s.total {
+            "All operational"
+        } else {
+            "Degraded"
+        };
         format!(r#"<span class="{cls}">{word}</span>"#)
     } else {
         r#"<span class="metric__muted">awaiting Beacon</span>"#.to_string()
@@ -230,9 +315,7 @@ fn render_metrics(snap: &Snapshot) -> String {
 /// A single metric card. `bar` is an optional 0..=100 fill (CPU / memory gauges only).
 fn metric_card(icon: &str, label: &str, value: &str, foot: &str, bar: Option<f64>) -> String {
     let bar_html = match bar {
-        Some(w) => format!(
-            r#"<div class="metric__bar"><span style="width:{w:.0}%"></span></div>"#
-        ),
+        Some(w) => format!(r#"<div class="metric__bar"><span style="width:{w:.0}%"></span></div>"#),
         None => String::new(),
     };
     format!(
@@ -298,49 +381,93 @@ fn pct_width_opt(v: f64) -> f64 {
 /// The fixed section order + display label. A catalog entry is placed by [`category_key`];
 /// the section is rendered only when at least one app falls in it.
 const SECTION_ORDER: &[(&str, &str)] = &[
-    ("ident", "Identity & Security"),
-    ("content", "Content & Knowledge"),
     ("comms", "Communication"),
+    ("content", "Content & Knowledge"),
+    ("ident", "Identity & Security"),
     ("obs", "Observability"),
     ("ai", "AI & Assistants"),
     ("dev", "Developer & Platform"),
-    ("more", "More"),
+    ("more", "Platform & Tools"),
 ];
+const MIN_SECTION: usize = 3;
 
 /// Map a tile's display name to its section key. Unknown names land in "more" so a newly
 /// added service still renders cleanly without a code change.
 fn category_key(name: &str) -> &'static str {
     match name {
-        "Identity" | "Audit" | "Vault" | "Threat Intel" | "Intel" | "Canary" | "Authz"
-        | "People" | "Pulse" | "Sigil" | "Crucible" | "Phantom" => "ident",
+        "Identity" | "Authorization" | "Directory" | "Audit" | "Vault" | "Threat Intel"
+        | "Intel" | "Canary" | "Authz" | "People" | "Pulse" | "Risk" | "Sigil" | "SPIFFE"
+        | "Crucible" | "Detonate" | "Phantom" | "Purple" | "Guard" => "ident",
         "Blog" | "Forum" | "Wiki" | "Pastefire" | "Paste" | "Search" | "Drive" | "Comments" => {
             "content"
         }
-        "Mail" | "Chat" | "Notify" | "Inbox" | "Calendar" | "Feeds" | "Clips" | "Social" => {
-            "comms"
+        "Mail" | "Chat" | "Notifications" | "Notify" | "Inbox" | "Calendar" | "Feeds" | "Clips"
+        | "Social" => "comms",
+        "Status" | "Vitals" | "Audit log" | "Logs" | "Sift" | "RCA" | "Traces" | "Filament"
+        | "Augur" => "obs",
+        "Assistant" | "AI Gateway" | "Relay" | "Grimoire" | "Familiar" | "Warden" | "Cascade" => {
+            "ai"
         }
-        "Status" | "Vitals" | "Sift" | "RCA" | "Filament" | "Augur" => "obs",
-        "Relay" | "Grimoire" | "Familiar" | "Warden" | "Cascade" => "ai",
         "Git" | "Registry" | "Events" | "Jobs" | "Backup" | "Lodestar" | "DNS" | "Ripple"
-        | "Eddy" | "Anvil" | "Atlas" | "Mycelium" | "Skiff" | "Estuary" => "dev",
+        | "Eddy" | "Edge" | "Anvil" | "CI" | "Atlas" | "Mycelium" | "Mesh" | "Skiff" | "Deploy"
+        | "Estuary" | "Egress" | "VPN enrollment" => "dev",
         _ => "more",
     }
 }
 
+fn grouped_catalog<'a>(
+    catalog: &'a [CatalogEntry],
+) -> Vec<(&'static str, &'static str, Vec<&'a CatalogEntry>)> {
+    let mut buckets: Vec<(&'static str, &'static str, Vec<&'a CatalogEntry>)> = SECTION_ORDER
+        .iter()
+        .map(|(key, label)| (*key, *label, Vec::new()))
+        .collect();
+    for entry in catalog {
+        let key = category_key(&entry.name);
+        if let Some((_, _, apps)) = buckets
+            .iter_mut()
+            .find(|(bucket_key, _, _)| *bucket_key == key)
+        {
+            apps.push(entry);
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut more = Vec::new();
+    let more_label = SECTION_ORDER
+        .iter()
+        .find(|(key, _)| *key == "more")
+        .map(|(_, label)| *label)
+        .unwrap_or("Platform & Tools");
+    for (key, label, apps) in buckets {
+        if key == "more" {
+            more.extend(apps);
+        } else if apps.len() >= MIN_SECTION {
+            out.push((key, label, apps));
+        } else {
+            more.extend(apps);
+        }
+    }
+    if !more.is_empty() {
+        out.push(("more", more_label, more));
+    }
+    out
+}
+
+fn filter_catalog(catalog: &[CatalogEntry], q: &str) -> Vec<CatalogEntry> {
+    catalog
+        .iter()
+        .filter(|entry| {
+            entry.name.to_lowercase().contains(q) || entry.description.to_lowercase().contains(q)
+        })
+        .cloned()
+        .collect()
+}
+
 /// Render the app chiclets grouped into the fixed sections (Okta end-user dashboard layout).
 fn render_sections(catalog: &[CatalogEntry], snap: &Snapshot) -> String {
-    if catalog.is_empty() {
-        return r#"<div class="empty">No apps are configured.</div>"#.to_string();
-    }
     let mut out = String::new();
-    for (key, label) in SECTION_ORDER {
-        let apps: Vec<&CatalogEntry> = catalog
-            .iter()
-            .filter(|e| category_key(&e.name) == *key)
-            .collect();
-        if apps.is_empty() {
-            continue;
-        }
+    for (key, label, apps) in grouped_catalog(catalog) {
         out.push_str(&render_app_section(key, key, label, &apps, snap));
     }
     out
@@ -350,7 +477,18 @@ fn render_dashboard_sections(
     catalog: &[CatalogEntry],
     mgmt: Option<&[CatalogEntry]>,
     snap: &Snapshot,
+    search_query: &str,
 ) -> String {
+    let mgmt_empty = mgmt.map_or(true, |entries| entries.is_empty());
+    if catalog.is_empty() && mgmt_empty {
+        if search_query.is_empty() {
+            return r#"<div class="empty">No apps are configured.</div>"#.to_string();
+        }
+        return format!(
+            r#"<div class="empty">No apps match &ldquo;{}&rdquo;.</div>"#,
+            esc(search_query)
+        );
+    }
     let mut out = render_sections(catalog, snap);
     if let Some(mgmt) = mgmt {
         if !mgmt.is_empty() {
@@ -382,7 +520,7 @@ fn render_app_section(
         count = apps.len(),
     );
     for entry in apps {
-        out.push_str(&render_app(entry, style_key, snap));
+        out.push_str(&render_app(entry, snap));
     }
     out.push_str("</div></section>");
     out
@@ -390,30 +528,43 @@ fn render_app_section(
 
 /// One app chiclet: a category-tinted icon tile, the app name + description, and a live status
 /// dot (top-right). Coming-soon services show a "Soon" badge and an accent dot.
-fn render_app(entry: &CatalogEntry, cat_key: &str, snap: &Snapshot) -> String {
-    let (dot_class, title, soon_badge) = if entry.coming_soon {
-        (
-            "pill-soon".to_string(),
-            "Coming soon".to_string(),
-            r#"<span class="app__soon">Soon</span>"#.to_string(),
-        )
+fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
+    let cat = category_key(&entry.name);
+    let soon_badge = if entry.coming_soon {
+        r#"<span class="app__soon">Soon</span>"#.to_string()
     } else {
-        let status = snap.statuses.status_of(&entry.component);
-        (
-            status_pill_class(status).to_string(),
-            status_label(status).to_string(),
-            String::new(),
-        )
+        String::new()
+    };
+    let status_span = if entry.coming_soon {
+        String::new()
+    } else {
+        match snap.statuses.status_of(&entry.component) {
+            "degraded" | "down" => {
+                let status = snap.statuses.status_of(&entry.component);
+                let title = status_label(status);
+                format!(
+                    r#"<span class="app__status {dot}" title="{title}" aria-label="{title}"></span>"#,
+                    dot = status_pill_class(status),
+                    title = esc(title),
+                )
+            }
+            _ => String::new(),
+        }
     };
     // Lowercased name+description backs the client-side app search filter.
     let data_name = esc(&format!("{} {}", entry.name, entry.description).to_lowercase());
     let app_id = esc(&entry.url);
     let pin_label = esc(&format!("Pin {}", entry.name));
+    let tooltip = if entry.description.is_empty() {
+        esc(&entry.name)
+    } else {
+        esc(&format!("{} — {}", entry.name, entry.description))
+    };
     format!(
         r#"<div class="appwrap" data-app-id="{id}">
-<a class="app app--{cat}" href="{url}" data-name="{dn}" data-app-id="{id}">
+<a class="app app--{cat}" href="{url}" title="{tooltip}" data-name="{dn}" data-app-id="{id}">
   {soon}
-  <span class="app__status {dot}" title="{title}" aria-label="{title}"></span>
+  {status}
   <span class="app__icon" aria-hidden="true">{icon}</span>
   <span class="app__name">{name}</span>
   <span class="app__desc">{desc}</span>
@@ -423,12 +574,12 @@ fn render_app(entry: &CatalogEntry, cat_key: &str, snap: &Snapshot) -> String {
 </button>
 </div>"#,
         id = app_id,
-        cat = cat_key,
+        cat = cat,
         url = esc(&entry.url),
+        tooltip = tooltip,
         dn = data_name,
         soon = soon_badge,
-        dot = dot_class,
-        title = esc(&title),
+        status = status_span,
         icon = icon_for(&entry.name, &entry.icon),
         name = esc(&entry.name),
         desc = esc(&entry.description),
