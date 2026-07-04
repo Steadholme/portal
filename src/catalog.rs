@@ -106,6 +106,7 @@ pub fn mgmt_catalog() -> Vec<CatalogEntry> {
         e("Backup", "https://backup.w33d.xyz", "Backup snapshots, retention policy and restore verification.", "Backup", "backup"),
         e("CI", "https://ci.w33d.xyz", "Build pipelines, runs and supply-chain checks.", "Anvil", "ci"),
         e("Deploy", "https://deploy.w33d.xyz", "Release rollout, routing and rollback controls.", "Skiff", "skiff"),
+        e("Sites", "https://siteflow.w33d.xyz", "Git-to-deploy site builds, previews and rollbacks.", "SiteFlow", "sites"),
         e("Egress", "https://egress.w33d.xyz", "Outbound proxy policy, reputation and audit controls.", "Estuary", "estuary"),
         e("Mesh", "https://mesh.w33d.xyz", "WireGuard mesh peers, ACLs and device enrollment.", "Mycelium", "mesh"),
         e("Edge", "https://edge.w33d.xyz", "Static edge cache, purge and asset delivery controls.", "Eddy", "edge"),
@@ -185,7 +186,7 @@ mod tests {
     #[test]
     fn mgmt_catalog_is_internal_ops_consoles_only() {
         let cat = mgmt_catalog();
-        assert_eq!(cat.len(), 26, "curated internal management catalog");
+        assert_eq!(cat.len(), 27, "curated internal management catalog");
 
         for (host, name, component) in [
             ("authz", "Authorization", "Authz"),
@@ -199,6 +200,7 @@ mod tests {
             ("backup", "Backup", "Backup"),
             ("ci", "CI", "Anvil"),
             ("deploy", "Deploy", "Skiff"),
+            ("siteflow", "Sites", "SiteFlow"),
             ("egress", "Egress", "Estuary"),
             ("mesh", "Mesh", "Mycelium"),
             ("edge", "Edge", "Eddy"),

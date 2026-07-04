@@ -401,7 +401,7 @@ async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
         "mgmt section title is escaped and visible"
     );
     assert!(
-        html.contains("26 apps"),
+        html.contains("27 apps"),
         "all internal consoles are in one section"
     );
 
