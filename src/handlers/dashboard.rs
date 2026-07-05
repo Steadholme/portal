@@ -21,8 +21,8 @@ use serde::Deserialize;
 use crate::auth;
 use crate::catalog::{mgmt_catalog, CatalogEntry};
 use crate::handlers::{
-    esc, fmt_pct, greeting, icon_for, name_from_email, pct_width, rel_time, severity_dot_class,
-    status_label, status_pill_class, APP_CSS, SHIELD_SVG,
+    app_css, esc, fmt_pct, greeting, icon_for, name_from_email, pct_width, rel_time,
+    severity_dot_class, status_label, status_pill_class, SHIELD_SVG,
 };
 use crate::snapshot::Snapshot;
 use crate::watchtower::{Event, Verify};
@@ -127,7 +127,7 @@ fn render(
     let sidebar_nav = render_sidebar_nav(catalog, mgmt);
     let sections = render_dashboard_sections(catalog, mgmt, snap, q);
     DASHBOARD_HTML
-        .replace("{{CSS}}", APP_CSS)
+        .replace("{{CSS}}", app_css())
         .replace("{{SHIELD}}", SHIELD_SVG)
         .replace("{{INITIAL}}", &esc(&initial))
         .replace("{{NAME}}", &esc(&name))

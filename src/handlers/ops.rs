@@ -29,8 +29,8 @@ use axum::response::{Html, IntoResponse, Response};
 use crate::auth;
 use crate::beacon::{Component, Statuses};
 use crate::handlers::{
-    esc, fmt_pct, name_from_email, rel_time, severity_dot_class, status_label, status_pill,
-    APP_CSS, SHIELD_SVG,
+    app_css, esc, fmt_pct, name_from_email, rel_time, severity_dot_class, status_label,
+    status_pill, SHIELD_SVG,
 };
 use crate::snapshot::Snapshot;
 use crate::vitals::Metrics;
@@ -260,7 +260,7 @@ fn render(
     let slice = &filtered[start.min(filtered.len())..(start + PAGE_SIZE).min(filtered.len())];
 
     OPS_HTML
-        .replace("{{CSS}}", APP_CSS)
+        .replace("{{CSS}}", app_css())
         .replace("{{SHIELD}}", SHIELD_SVG)
         .replace("{{INITIAL}}", &esc(&initial))
         .replace("{{NAME}}", &esc(&name))

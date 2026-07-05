@@ -10,8 +10,24 @@ pub mod dashboard;
 pub mod health;
 pub mod ops;
 
+use std::sync::OnceLock;
+
+/// Portal-only CSS layered after Odyssey's canonical font, tokens, and components.
+pub const SERVICE_CSS: &str = include_str!("../../static/service.css");
+
+static APP_CSS: OnceLock<String> = OnceLock::new();
+
 /// Embedded design system, inlined into the rendered page's `<style>`.
-pub const APP_CSS: &str = include_str!("../../static/app.css");
+pub fn app_css() -> &'static str {
+    APP_CSS
+        .get_or_init(|| {
+            let mut css = String::with_capacity(odyssey::APP_CSS.len() + SERVICE_CSS.len());
+            css.push_str(odyssey::APP_CSS);
+            css.push_str(SERVICE_CSS);
+            css
+        })
+        .as_str()
+}
 
 /// The HOLDFAST shield glyph (small, for the app-bar brand lockup). Shared verbatim with
 /// the rest of the stack so the whole product reads as one brand.
