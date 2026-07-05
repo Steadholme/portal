@@ -436,3 +436,22 @@ body.palette-open { overflow:hidden; }
   .palette__meta { align-items:flex-start; flex-direction:column; gap:2px; }
 }
 @media (max-width:430px) { .appgrid { grid-template-columns:1fr; } }
+
+/* Portal-specific chrome: tighten the app-bar and stack the operator-console
+   filters / incident bar on narrow screens (canonical sidebar/appgrid handled above). */
+@media (max-width:900px) {
+  .topbar { gap:12px; padding:0 18px; }
+  .ops-filters { gap:8px; }
+}
+@media (max-width:640px) {
+  .topbar { gap:10px; padding:0 14px; }
+  .topbar__right { gap:8px; }
+  .search { min-width:0; }
+  .search input { padding-right:16px; }
+  .search__kbd { display:none; }
+  .incidentbar { flex-wrap:wrap; }
+  .incidentbar__link { flex-basis:100%; }
+  .ops-input,
+  .ops-select,
+  .ops-input--epoch { flex:1 1 100%; }
+}
