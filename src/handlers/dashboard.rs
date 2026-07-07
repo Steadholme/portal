@@ -405,9 +405,8 @@ fn category_key(name: &str) -> &'static str {
         | "Social" => "comms",
         "Status" | "Vitals" | "Audit log" | "Logs" | "Sift" | "RCA" | "Traces" | "Filament"
         | "Augur" => "obs",
-        "Assistant" | "AI Gateway" | "Relay" | "Grimoire" | "Familiar" | "Warden" | "Cascade" => {
-            "ai"
-        }
+        "Assistant" | "AI Gateway" | "Multica" | "Relay" | "Grimoire" | "Familiar" | "Warden"
+        | "Cascade" => "ai",
         "Git" | "Registry" | "Events" | "Jobs" | "Backup" | "Lodestar" | "DNS" | "Ripple"
         | "Eddy" | "Edge" | "Anvil" | "CI" | "Atlas" | "Mycelium" | "Mesh" | "Skiff" | "Deploy"
         | "Estuary" | "Egress" | "VPN enrollment" => "dev",

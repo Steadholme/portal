@@ -73,6 +73,7 @@ pub fn default_catalog() -> Vec<CatalogEntry> {
         e("Search", "https://search.w33d.xyz", "Federated search with cited Q&A across your content.", "Search", "search"),
         e("Assistant", "https://ami.w33d.xyz", "Personal AI chat plus replayable AI workflows.", "Familiar", "assistant"),
         e("AI Gateway", "https://ai.w33d.xyz", "OpenAI-compatible LLM gateway and API-key console.", "Relay", "ai"),
+        e("Multica", "https://multica.w33d.xyz", "Managed coding-agent workspace with issues, runtimes and reusable skills.", "Multica", "ai"),
         // --- Developer ---
         e("Git", "https://git.w33d.xyz", "Self-hosted git forge with issues and pull requests.", "Git", "git"),
         e("Registry", "https://registry.w33d.xyz", "OCI/Docker container registry.", "Registry", "registry"),
@@ -138,7 +139,7 @@ mod tests {
     #[test]
     fn default_catalog_is_public_apps_only() {
         let cat = default_catalog();
-        assert_eq!(cat.len(), 21, "curated public app catalog");
+        assert_eq!(cat.len(), 22, "curated public app catalog");
 
         let identity = cat.iter().find(|e| e.name == "Identity").expect("Identity tile");
         assert_eq!(identity.url, "https://sso.w33d.xyz");
@@ -158,7 +159,7 @@ mod tests {
         for name in [
             "Blog", "Forum", "Wiki", "Comments", "Paste", "Drive", "Feeds", "Clips", "Social",
             "Search", "Assistant", "AI Gateway", "Chat", "Calendar", "Notifications", "Inbox",
-            "Git", "Registry",
+            "Multica", "Git", "Registry",
         ] {
             assert!(cat.iter().any(|e| e.name == name), "{name} tile present");
         }
