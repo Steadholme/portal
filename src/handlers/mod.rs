@@ -2,9 +2,8 @@
 //!
 //! `health` is the unauthenticated liveness probe; `dashboard` is the SSO-fronted apex
 //! launcher. The shared design tokens / CSS are embedded (via `include_str!`) and inlined
-//! into the page, matching the HOLDFAST enterprise brand (the same look as the Keystone
-//! login UI and the Beacon status page): brand gradient, indigo accent, status pills,
-//! cards, app-bar with the shield + wordmark.
+//! into the page. Odyssey owns the shared mineral-paper, basalt, oxide, status, card, and
+//! shell language; Portal keeps only its catalog and command-center domain layout.
 
 pub mod dashboard;
 pub mod health;
@@ -29,9 +28,8 @@ pub fn app_css() -> &'static str {
         .as_str()
 }
 
-/// The HOLDFAST shield glyph (small, for the app-bar brand lockup). Shared verbatim with
-/// the rest of the stack so the whole product reads as one brand.
-pub const SHIELD_SVG: &str = r##"<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="hf-shield-sm" x1="8" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop stop-color="#818CF8"/><stop offset="1" stop-color="#4F46E5"/></linearGradient></defs><path d="M24 4 8 9.5V22c0 11 7 17.4 16 21.5C33 39.4 40 33 40 22V9.5L24 4Z" fill="url(#hf-shield-sm)"/><rect x="20" y="19" width="8" height="13" rx="1" fill="#fff" fill-opacity="0.92"/><path d="M20 19v-2.5a4 4 0 0 1 8 0V19" stroke="#fff" stroke-width="2" stroke-opacity="0.92" fill="none"/></svg>"##;
+/// Canonical HOLDFAST mark; its color follows Odyssey's semantic Portal accent.
+pub const SHIELD_SVG: &str = odyssey::HOLDFAST_MARK_SVG;
 
 /// Minimal HTML escaping for text/attribute interpolation.
 pub fn esc(s: &str) -> String {

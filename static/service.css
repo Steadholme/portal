@@ -25,7 +25,7 @@
   color:inherit; text-decoration:none;
 }
 .sidebar__brand:hover { color:inherit; text-decoration:none; }
-.sidebar__shield { width:34px; height:34px; display:inline-flex; filter:drop-shadow(0 4px 10px color-mix(in srgb, var(--accent) 28%, transparent)); }
+.sidebar__shield { width:34px; height:34px; display:inline-flex; color:var(--accent); filter:drop-shadow(2px 2px 0 color-mix(in srgb, var(--accent) 24%, transparent)); }
 .sidebar__shield svg { width:100%; height:100%; }
 .sidebar__wordmark { display:flex; flex-direction:column; line-height:1.05; }
 .sidebar__wordmark b { font-size:16px; font-weight:800; letter-spacing:0; color:var(--ink); }
