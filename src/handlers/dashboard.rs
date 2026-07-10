@@ -14,8 +14,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::extract::{Query, State};
-use axum::http::HeaderMap;
-use axum::response::Html;
+use axum::http::{header, HeaderMap, HeaderValue};
+use axum::response::{Html, IntoResponse, Response};
+use odyssey::{RuntimeOpts, WireOpts, WireSwap};
 use serde::Deserialize;
 
 use crate::auth;
@@ -30,6 +31,7 @@ use crate::AppState;
 
 const DASHBOARD_HTML: &str = include_str!("../../templates/dashboard.html");
 const HEADER_GATEWAY_ZONE: &str = "x-gateway-zone";
+const HEADER_WIRE: &str = "x-wire";
 const GATEWAY_ZONE_INTERNAL: &str = "internal";
 const MGMT_SECTION_ID: &str = "infraops";
 const MGMT_SECTION_LABEL: &str = "Infrastructure & Operations";
@@ -48,20 +50,31 @@ pub async fn dashboard(
     State(state): State<AppState>,
     Query(query): Query<DashQuery>,
     headers: HeaderMap,
-) -> Html<String> {
+) -> Response {
     let email = auth::signed_in_email(&headers).unwrap_or_else(|| "operator".to_string());
     let internal_zone = gateway_zone_internal(&headers);
+    let wire_fragment = wire_request(&headers);
     let snap = state.cache.get(&state.config).await;
-    let (now_secs, hour) = clock();
-    Html(render(
+    let clock = clock();
+    let body = render(
         &state.config.catalog,
         internal_zone,
         &email,
         &snap,
-        now_secs,
-        hour,
+        clock,
         query.q.trim(),
-    ))
+        wire_fragment,
+    );
+    let mut response = Html(body).into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    response.headers_mut().insert(
+        header::VARY,
+        HeaderValue::from_static("X-Wire, X-Gateway-Zone, X-Auth-Email"),
+    );
+    response
 }
 
 fn gateway_zone_internal(headers: &HeaderMap) -> bool {
@@ -71,6 +84,16 @@ fn gateway_zone_internal(headers: &HeaderMap) -> bool {
             .and_then(|v| v.to_str().ok())
             .map(str::trim),
         Some(GATEWAY_ZONE_INTERNAL)
+    )
+}
+
+fn wire_request(headers: &HeaderMap) -> bool {
+    matches!(
+        headers
+            .get(HEADER_WIRE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::trim),
+        Some("1")
     )
 }
 
@@ -89,10 +112,12 @@ fn render(
     internal_zone: bool,
     email: &str,
     snap: &Snapshot,
-    now_secs: i64,
-    hour: u32,
+    clock: (i64, u32),
     search_query: &str,
+    wire_fragment: bool,
 ) -> String {
+    let (now_secs, hour) = clock;
+    let public_surface_count = catalog.len();
     let name = name_from_email(email);
     let initial = name
         .chars()
@@ -113,6 +138,7 @@ fn render(
     } else {
         None
     };
+    let internal_surface_count = mgmt.as_ref().map(Vec::len);
     let filtered_mgmt = if q.is_empty() {
         None
     } else {
@@ -126,6 +152,18 @@ fn render(
     };
     let sidebar_nav = render_sidebar_nav(catalog, mgmt);
     let sections = render_dashboard_sections(catalog, mgmt, snap, q);
+    let estate_live = render_estate_live(
+        &name,
+        snap,
+        now_secs,
+        hour,
+        public_surface_count,
+        internal_surface_count,
+    );
+    if wire_fragment {
+        return estate_live;
+    }
+    let runtime = odyssey::dynamic_scripts_with(RuntimeOpts::new().with_motion());
     DASHBOARD_HTML
         .replace("{{CSS}}", app_css())
         .replace("{{SHIELD}}", SHIELD_SVG)
@@ -133,14 +171,11 @@ fn render(
         .replace("{{NAME}}", &esc(&name))
         .replace("{{EMAIL}}", &esc(email))
         .replace("{{HEALTH_CHIP}}", &health_chip(snap))
-        .replace("{{GREETING_WORD}}", greeting(hour))
-        .replace("{{HERO_SUB}}", &hero_sub(snap))
         .replace("{{SIDEBAR_NAV}}", &sidebar_nav)
-        .replace("{{METRICS}}", &render_metrics(snap))
+        .replace("{{ESTATE_LIVE}}", &estate_live)
         .replace("{{SECTIONS}}", &sections)
-        .replace("{{ACTIVITY}}", &render_activity(&snap.events, now_secs))
-        .replace("{{INCIDENT_BANNER}}", &incident_banner(snap))
         .replace("{{SEARCH_VALUE}}", &esc(q))
+        .replace("{{ODYSSEY_RUNTIME}}", runtime.as_str())
 }
 
 /// The sidebar catalog nav: one item per non-empty category (in [`SECTION_ORDER`]), with an
@@ -245,6 +280,145 @@ fn hero_sub(snap: &Snapshot) -> String {
     } else {
         esc(&parts.join("  ·  "))
     }
+}
+
+/// The Odyssey Estate bridge. It is deliberately one independent, read-only region: Wire may
+/// replace it without invalidating the catalog nodes held by the launcher/pin/palette runtime.
+/// The same bytes are embedded in the full SSR document and returned for `X-Wire: 1`.
+fn render_estate_live(
+    name: &str,
+    snap: &Snapshot,
+    now_secs: i64,
+    hour: u32,
+    public_surface_count: usize,
+    internal_surface_count: Option<usize>,
+) -> String {
+    let refresh = odyssey::link_with_wire(
+        "/#estate-live",
+        "Refresh snapshot",
+        WireOpts::new("#estate-live")
+            .select("#estate-live")
+            .swap(WireSwap::Outer)
+            .busy_label("Refreshing…")
+            .success_message("Estate snapshot refreshed")
+            .error_message("Could not refresh the Estate snapshot"),
+    );
+    format!(
+        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title">
+{incident}
+<div class="dash-hero">
+  <p class="kicker">Odyssey Estate · Sovereign product fabric</p>
+  <h1>{greeting}, <span class="grad">{name}</span></h1>
+  <p class="lede">{sub}</p>
+</div>
+<section class="estate-deck" aria-label="Estate access planes">
+  <div class="estate-deck__head">
+    <div>
+      <p class="estate-deck__eyebrow">Access map · read-only</p>
+      <h2 id="estate-title">One estate, three trust paths</h2>
+    </div>
+    <div class="estate-deck__actions">
+      {signal}
+      <span class="estate-refresh">{refresh}</span>
+    </div>
+  </div>
+  {planes}
+</section>
+<div class="estate-observe">
+  <section class="sys estate-health" id="sys" aria-labelledby="estate-health-title">
+    <div class="sys__head">
+      <h2 id="estate-health-title">Fleet health</h2>
+      <span class="hint">Beacon · Vitals · Watchtower</span>
+    </div>
+    <div class="metrics">{metrics}</div>
+  </section>
+  <section class="sys estate-activity" id="activity" aria-labelledby="estate-activity-title">
+    <div class="sys__head">
+      <h2 id="estate-activity-title">Recent signals</h2>
+      <span class="hint">Sealed audit events</span>
+    </div>
+    <div class="feedcard" data-motion-list>{activity}</div>
+  </section>
+</div>
+</section>"#,
+        incident = incident_banner(snap),
+        greeting = greeting(hour),
+        name = esc(name),
+        sub = hero_sub(snap),
+        signal = fleet_signal(snap),
+        refresh = refresh,
+        planes = render_access_planes(public_surface_count, internal_surface_count),
+        metrics = render_metrics(snap),
+        activity = render_activity(&snap.events, now_secs, internal_surface_count.is_some(),),
+    )
+}
+
+fn fleet_signal(snap: &Snapshot) -> String {
+    let statuses = &snap.statuses;
+    if statuses.reached && statuses.total > 0 {
+        let class = if statuses.up == statuses.total {
+            "estate-signal--ok"
+        } else {
+            "estate-signal--warn"
+        };
+        return format!(
+            r#"<span class="estate-signal {class}" role="status"><span aria-hidden="true"></span>{up}/{total} operational</span>"#,
+            class = class,
+            up = statuses.up,
+            total = statuses.total,
+        );
+    }
+    r#"<span class="estate-signal" role="status"><span aria-hidden="true"></span>Snapshot syncing</span>"#
+        .to_string()
+}
+
+/// Access-plane copy comes only from the configured public catalog, the exact gateway-attested
+/// zone, and the checked-in management catalog. The external view never receives management URLs.
+fn render_access_planes(
+    public_surface_count: usize,
+    internal_surface_count: Option<usize>,
+) -> String {
+    let (private_value, private_copy, private_state, private_class) = match internal_surface_count {
+        Some(count) => (
+            format!("{count} management surfaces"),
+            "Gateway attests the internal zone; WireGuard-only consoles are available below.",
+            "Internal zone",
+            " estate-plane--connected",
+        ),
+        None => (
+            "WireGuard required".to_string(),
+            "Management hostnames stay hidden until the gateway attests an internal connection.",
+            "Restricted",
+            "",
+        ),
+    };
+    format!(
+        r#"<div class="estate-planes">
+  <article class="estate-plane estate-plane--public" data-motion-enter>
+    <p class="estate-plane__rail"><span>01</span>Public gateway</p>
+    <h3>{public_count} product surfaces</h3>
+    <p>Internet-routable catalog entries. Each product keeps its own authentication policy.</p>
+    <span class="estate-plane__state"><span aria-hidden="true"></span>Routed catalog</span>
+  </article>
+  <article class="estate-plane estate-plane--status" data-motion-enter>
+    <p class="estate-plane__rail"><span>02</span>Open status</p>
+    <h3>Anonymous, read-only</h3>
+    <p><a href="https://status.w33d.xyz">status.w33d.xyz</a> stays publicly readable; no Portal identity or WireGuard connection is required.</p>
+    <span class="estate-plane__state"><span aria-hidden="true"></span>Public</span>
+  </article>
+  <article class="estate-plane estate-plane--private{private_class}" data-motion-enter>
+    <p class="estate-plane__rail"><span>03</span>WireGuard plane</p>
+    <h3>{private_value}</h3>
+    <p>{private_copy}</p>
+    <span class="estate-plane__state"><span aria-hidden="true"></span>{private_state}</span>
+  </article>
+</div>"#,
+        public_count = public_surface_count,
+        private_class = private_class,
+        private_value = private_value,
+        private_copy = private_copy,
+        private_state = private_state,
+    )
 }
 
 // --- Metric cards ----------------------------------------------------------------------
@@ -478,7 +652,7 @@ fn render_dashboard_sections(
     snap: &Snapshot,
     search_query: &str,
 ) -> String {
-    let mgmt_empty = mgmt.map_or(true, |entries| entries.is_empty());
+    let mgmt_empty = mgmt.is_none_or(|entries| entries.is_empty());
     if catalog.is_empty() && mgmt_empty {
         if search_query.is_empty() {
             return r#"<div class="empty">No apps are configured.</div>"#.to_string();
@@ -591,7 +765,7 @@ fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
 
 /// Render the recent-activity feed from the most recent audit events. Empty / unreachable
 /// Watchtower shows a calm placeholder rather than an error.
-fn render_activity(events: &[Event], now_secs: i64) -> String {
+fn render_activity(events: &[Event], now_secs: i64, disclose_target: bool) -> String {
     if events.is_empty() {
         return r#"<div class="feed__empty">No recent activity to show.</div>"#.to_string();
     }
@@ -609,7 +783,7 @@ fn render_activity(events: &[Event], now_secs: i64) -> String {
         };
         // Watchtower stamps `ts` in milliseconds; relative time works in seconds.
         let when = rel_time(ev.ts / 1_000, now_secs);
-        let target = if ev.target.trim().is_empty() {
+        let target = if !disclose_target || ev.target.trim().is_empty() {
             String::new()
         } else {
             format!("{} · ", esc(&ev.target))
@@ -619,13 +793,14 @@ fn render_activity(events: &[Event], now_secs: i64) -> String {
   <span class="feed__dot {sev}" aria-hidden="true"></span>
   <div class="feed__body">
     <div class="feed__line"><span class="feed__action">{action}</span> <span class="feed__actor">{actor}</span></div>
-    <div class="feed__meta">{target}{when}</div>
+    <div class="feed__meta">{target}<span data-spark-reltime data-ts="{ts}">{when}</span></div>
   </div>
 </div>"#,
             sev = severity_dot_class(&ev.severity),
             action = esc(&action),
             actor = esc(&actor),
             target = target,
+            ts = ev.ts / 1_000,
             when = esc(&when),
         ));
     }
@@ -640,3 +815,75 @@ const ICON_MEM: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentC
 const ICON_AUDIT: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>"##;
 const ICON_LOAD: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M12 4V2M4 12H2M12 20v2M20 12h2M6 6 4.5 4.5M18 6l1.5-1.5"/><path d="m12 10 4-2"/></svg>"##;
 const ICON_STAR: &str = r##"<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 3 2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3Z"/></svg>"##;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn full_document_embeds_the_exact_wire_fragment() {
+        let catalog = crate::catalog::default_catalog();
+        let snapshot = Snapshot::default();
+        let full = render(
+            &catalog,
+            false,
+            "alice@holdfast.local",
+            &snapshot,
+            (1_700_000_000, 8),
+            "",
+            false,
+        );
+        let fragment = render(
+            &catalog,
+            false,
+            "alice@holdfast.local",
+            &snapshot,
+            (1_700_000_000, 8),
+            "",
+            true,
+        );
+
+        assert!(
+            fragment.starts_with(r#"<section class="estate-live" id="estate-live" role="region""#)
+        );
+        assert!(
+            full.contains(&fragment),
+            "full SSR uses the fragment renderer byte-for-byte"
+        );
+        assert!(!fragment.contains(r#"id="appsections""#));
+        assert!(!fragment.contains("data-pin-button"));
+        assert!(!fragment.contains(r#"id="cmdpalette""#));
+        assert!(full.contains("odyssey-wire v1"));
+        assert!(full.contains("odyssey-spark v1"));
+        assert!(full.contains("odyssey-motion v1"));
+    }
+
+    #[test]
+    fn external_access_map_describes_but_does_not_disclose_management_surfaces() {
+        let external = render_access_planes(22, None);
+        assert!(external.contains("22 product surfaces"));
+        assert!(external.contains("Anonymous, read-only"));
+        assert!(external.contains("https://status.w33d.xyz"));
+        assert!(external.contains("WireGuard required"));
+        assert!(!external.contains("management surfaces"));
+        assert!(!external.contains("vault.w33d.xyz"));
+
+        let internal = render_access_planes(22, Some(27));
+        assert!(internal.contains("27 management surfaces"));
+        assert!(internal.contains("Internal zone"));
+        assert!(
+            !internal.contains("vault.w33d.xyz"),
+            "summary never invents a route list"
+        );
+    }
+
+    #[test]
+    fn only_the_exact_wire_header_requests_a_fragment() {
+        let mut headers = HeaderMap::new();
+        assert!(!wire_request(&headers));
+        headers.insert(HEADER_WIRE, HeaderValue::from_static("true"));
+        assert!(!wire_request(&headers));
+        headers.insert(HEADER_WIRE, HeaderValue::from_static("1"));
+        assert!(wire_request(&headers));
+    }
+}

@@ -256,6 +256,70 @@
 .noresults { display:none; color:var(--ink-2); font-size:14px; padding:30px 4px; }
 .noresults.show { display:block; }
 
+/* Odyssey Estate bridge: a read-only access map and live fleet snapshot. */
+.estate-live { scroll-margin-top:78px; }
+.estate-deck {
+  position:relative; overflow:hidden; margin:0 0 24px; padding:18px;
+  background:var(--surface); border:1px solid var(--border-2); border-radius:var(--r);
+  box-shadow:var(--sh-md);
+}
+.estate-deck::before {
+  content:""; position:absolute; inset:0 auto 0 0; width:4px;
+  background:linear-gradient(180deg,var(--accent),var(--accent-2));
+}
+.estate-deck__head {
+  display:flex; align-items:flex-start; justify-content:space-between; gap:20px;
+  margin:0 0 15px; padding:0 2px 14px 8px; border-bottom:1px solid var(--hairline);
+}
+.estate-deck__eyebrow {
+  margin:0 0 4px; color:var(--accent-ink); font-size:10px; font-weight:750;
+  letter-spacing:.14em; text-transform:uppercase;
+}
+.estate-deck__head h2 { margin:0; color:var(--ink); font-size:18px; font-weight:680; letter-spacing:-.01em; }
+.estate-deck__actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px; }
+.estate-signal {
+  display:inline-flex; align-items:center; gap:7px; min-height:30px; padding:0 10px;
+  color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--r-pill); font-size:11.5px; font-weight:650; white-space:nowrap;
+}
+.estate-signal > span { width:7px; height:7px; border-radius:50%; background:var(--unknown); }
+.estate-signal--ok > span { background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
+.estate-signal--warn > span { background:var(--warn); box-shadow:0 0 0 3px var(--warn-soft); }
+.estate-refresh > a {
+  display:inline-flex; align-items:center; min-height:30px; padding:0 11px;
+  color:var(--accent-ink); background:var(--accent-soft); border:1px solid var(--accent-soft-2);
+  border-radius:var(--r-sm); font-size:11.5px; font-weight:700; text-decoration:none;
+}
+.estate-refresh > a:hover { background:var(--accent-soft-2); text-decoration:none; }
+.estate-refresh > a:focus-visible { outline:none; box-shadow:0 0 0 4px var(--ring); }
+.estate-planes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.estate-plane {
+  position:relative; min-width:0; padding:15px 15px 13px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+}
+.estate-plane::after { content:""; position:absolute; inset:0 0 auto; height:2px; background:var(--unknown); }
+.estate-plane--public::after { background:var(--info); }
+.estate-plane--status::after,
+.estate-plane--connected::after { background:var(--ok); }
+.estate-plane__rail {
+  display:flex; align-items:center; gap:8px; margin:0 0 18px;
+  color:var(--ink-3); font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+}
+.estate-plane__rail > span { color:var(--accent-ink); font-family:var(--mono); }
+.estate-plane > h3 { margin:0; color:var(--ink); font-size:17px; line-height:1.25; }
+.estate-plane > p:not(.estate-plane__rail) { min-height:48px; margin:7px 0 15px; color:var(--ink-2); font-size:12px; line-height:1.5; }
+.estate-plane a { color:var(--accent-ink); font-weight:650; text-decoration:underline; text-underline-offset:2px; }
+.estate-plane__state { display:inline-flex; align-items:center; gap:6px; color:var(--ink-3); font-size:11px; font-weight:650; }
+.estate-plane__state > span { width:6px; height:6px; border-radius:50%; background:var(--unknown); }
+.estate-plane--public .estate-plane__state > span { background:var(--info); }
+.estate-plane--status .estate-plane__state > span,
+.estate-plane--connected .estate-plane__state > span { background:var(--ok); }
+.estate-observe { display:grid; grid-template-columns:minmax(0,3fr) minmax(280px,2fr); align-items:start; gap:18px; }
+.estate-observe .sys { margin-top:0; }
+.estate-health .metrics { grid-template-columns:repeat(3,minmax(130px,1fr)); gap:10px; }
+.estate-health .metric { padding:14px 15px; }
+.estate-activity .feedcard { max-height:314px; overflow:auto; }
+
 /* System health and activity */
 .sys { margin-top:30px; scroll-margin-top:84px; }
 .sys__head { display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
@@ -424,10 +488,22 @@ body.palette-open { overflow:hidden; }
   .topbar__burger { display:inline-flex; }
   .content { padding:26px 18px 18px; }
 }
+@media (max-width:1120px) {
+  .estate-observe { grid-template-columns:1fr; }
+  .estate-activity .feedcard { max-height:none; }
+}
 @media (min-width:901px) { .scrim { display:none; } }
+@media (max-width:760px) {
+  .estate-planes { grid-template-columns:1fr; }
+  .estate-plane > p:not(.estate-plane__rail) { min-height:0; }
+}
 @media (max-width:720px) { .appgrid { grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); } }
 @media (max-width:620px) { .healthchip, .topbar__title span { display:none; } }
 @media (max-width:560px) {
+  .estate-deck { padding:15px; }
+  .estate-deck__head { align-items:stretch; flex-direction:column; gap:12px; }
+  .estate-deck__actions { justify-content:flex-start; }
+  .estate-health .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .appgrid { grid-template-columns:repeat(auto-fill, minmax(158px,1fr)); }
   .quickgrid { grid-template-columns:repeat(auto-fill, minmax(104px,1fr)); }
   .quickgrid--strip .appwrap--compact { flex-basis:112px; }

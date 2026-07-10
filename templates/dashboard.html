@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-ody-profile="portal">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>w33d · App Portal</title>
+  <title>w33d · Odyssey Estate</title>
   <style>{{CSS}}</style>
 </head>
-<body>
+<body data-ody-shell="1.2">
   <div class="shell">
     <aside class="sidebar" id="sidebar" aria-label="Primary">
       <a class="sidebar__brand" href="/" aria-label="HOLDFAST home">
@@ -18,7 +18,7 @@
       <nav class="sidebar__nav">
         <a class="nav__item is-active" href="#top" data-spy="top">
           <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          <span class="nav__text">Dashboard</span>
+          <span class="nav__text">Estate</span>
         </a>
 
         <p class="nav__label">Catalog</p>
@@ -77,8 +77,8 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <div class="topbar__title">
-          <strong>App Portal</strong>
-          <span>Dashboard</span>
+          <strong>Odyssey Estate</strong>
+          <span>Product bridge</span>
         </div>
         <form class="search" role="search" method="get" action="/">
           <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -94,13 +94,7 @@
       </header>
 
       <div class="content" id="top">
-        {{INCIDENT_BANNER}}
-
-        <div class="dash-hero">
-          <p class="kicker">Sovereign Cloud Console</p>
-          <h1>{{GREETING_WORD}}, <span class="grad">{{NAME}}</span></h1>
-          <p class="lede">{{HERO_SUB}}</p>
-        </div>
+        {{ESTATE_LIVE}}
 
         <div class="personalapps" id="personalapps" aria-live="polite">
           <section class="quicksec quicksec--empty" id="pinnedapps" aria-label="Pinned">
@@ -113,22 +107,6 @@
           {{SECTIONS}}
         </div>
         <div class="noresults" id="noresults">No apps match your search.</div>
-
-        <section class="sys" id="sys" aria-label="System health">
-          <div class="sys__head">
-            <h2>System health</h2>
-            <span class="hint">Live from Beacon · Vitals · Watchtower</span>
-          </div>
-          <div class="metrics">{{METRICS}}</div>
-        </section>
-
-        <section class="sys" id="activity" aria-label="Recent activity">
-          <div class="sys__head">
-            <h2>Recent activity</h2>
-            <span class="hint">Tamper-evident audit trail</span>
-          </div>
-          <div class="feedcard">{{ACTIVITY}}</div>
-        </section>
 
         <footer class="site-foot">
           <span>HOLDFAST · Sovereign infrastructure</span>
@@ -158,6 +136,7 @@
     </div>
   </div>
 
+  {{ODYSSEY_RUNTIME}}
   <script>
   (function () {
     var sidebar = document.getElementById('sidebar'),

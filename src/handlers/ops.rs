@@ -158,8 +158,8 @@ impl AuditQuery {
         contains_ci(&ev.source, &self.source)
             && contains_ci(&ev.actor, &self.actor)
             && contains_ci(&ev.action, &self.action)
-            && from_ms.map_or(true, |f| ev.ts >= f)
-            && to_ms.map_or(true, |t| ev.ts <= t)
+            && from_ms.is_none_or(|f| ev.ts >= f)
+            && to_ms.is_none_or(|t| ev.ts <= t)
     }
 
     /// Rebuild the query string for a pager link targeting `page`, preserving every active

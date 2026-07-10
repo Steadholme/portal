@@ -311,6 +311,180 @@ async fn dashboard_renders_full_command_center() {
 }
 
 #[tokio::test]
+async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() {
+    let state = state_with(
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+    );
+    let (status, html) = call(&state, get_as("/", "alice@holdfast.local")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    assert!(html.contains(r#"<html lang="en" data-ody-profile="portal">"#));
+    assert!(html.contains(r#"<body data-ody-shell="1.2">"#));
+    assert!(
+        html.contains("odyssey-wire v1"),
+        "Wire runtime is vendored inline"
+    );
+    assert!(
+        html.contains("odyssey-spark v1"),
+        "Spark runtime is vendored inline"
+    );
+    assert!(
+        html.contains("odyssey-motion v1"),
+        "reduced-motion-aware polish is enabled"
+    );
+
+    assert!(html.contains(r#"id="estate-live" role="region" aria-labelledby="estate-title""#));
+    assert!(html.contains("One estate, three trust paths"));
+    assert!(
+        html.contains("22 product surfaces"),
+        "public count comes from Config catalog"
+    );
+    assert!(html.contains("Anonymous, read-only"));
+    assert!(html.contains(
+        "status.w33d.xyz</a> stays publicly readable; no Portal identity or WireGuard connection is required."
+    ));
+    assert!(html.contains("WireGuard required"));
+    assert!(html.contains("Fleet health"));
+    assert!(html.contains("Recent signals"));
+
+    // The only Wire canary is the isolated live snapshot. JS-owned catalog, pin and palette nodes
+    // are never replacement targets.
+    assert_eq!(
+        html.matches(r##"data-wire-target="#estate-live""##).count(),
+        1
+    );
+    assert!(html.contains(r##"data-wire-select="#estate-live""##));
+    assert!(html.contains(r#"data-wire-swap="outer""#));
+    assert!(!html.contains(r##"data-wire-target="#appsections""##));
+    assert!(
+        !html.contains(r#"<form class="search" role="search" method="get" action="/" data-wire"#)
+    );
+}
+
+#[tokio::test]
+async fn dashboard_wire_response_is_exact_read_only_live_region() {
+    let state = state_with(
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+    );
+    let request = Request::builder()
+        .uri("/")
+        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap();
+    let response = app(state).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get("cache-control").unwrap(),
+        "private, no-store"
+    );
+    assert_eq!(
+        response.headers().get("vary").unwrap(),
+        "X-Wire, X-Gateway-Zone, X-Auth-Email"
+    );
+    assert!(response
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("text/html"));
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let fragment = String::from_utf8_lossy(&bytes);
+
+    assert!(fragment.starts_with(
+        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title">"#
+    ));
+    assert!(
+        fragment.contains(r#"href="/#estate-live""#),
+        "native GET fallback remains"
+    );
+    assert!(fragment.contains(r#"data-wire="get""#));
+    assert!(fragment.contains(r##"data-wire-target="#estate-live""##));
+    assert!(fragment.contains(r#"data-spark-reltime"#) || fragment.contains("No recent activity"));
+    assert!(!fragment.contains("<!DOCTYPE html>"));
+    assert!(!fragment.contains(r#"id="appsections""#));
+    assert!(!fragment.contains("data-pin-button"));
+    assert!(!fragment.contains(r#"id="cmdpalette""#));
+    assert!(
+        !fragment.contains("odyssey-wire v1"),
+        "runtime stays in the full document"
+    );
+    assert!(
+        !fragment.contains("csrf_token"),
+        "read-only GET never receives CSRF markup"
+    );
+    assert!(!fragment.to_ascii_lowercase().contains("method=\"post\""));
+}
+
+#[tokio::test]
+async fn dashboard_external_wire_fragment_hides_audit_event_targets() {
+    let watchtower = fake_service(&[
+        (
+            "/api/verify",
+            r#"{"ok":true,"count":1,"head_hash":"abc"}"#,
+        ),
+        (
+            "/api/events",
+            r#"[{"seq":1,"ts":1700000000000,"source":"vault","actor":"operator","action":"probe","target":"vault.w33d.xyz","severity":"info"}]"#,
+        ),
+    ])
+    .await;
+    let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower);
+
+    let external = Request::builder()
+        .uri("/")
+        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap();
+    let (external_status, external_fragment) = call(&state, external).await;
+    assert_eq!(external_status, StatusCode::OK);
+    assert!(external_fragment.contains("Recent signals"));
+    assert!(external_fragment.contains("probe"));
+    assert!(
+        !external_fragment.contains("vault.w33d.xyz"),
+        "external fragments must not disclose arbitrary audit targets"
+    );
+
+    let internal = Request::builder()
+        .uri("/")
+        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Gateway-Zone", "internal")
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap();
+    let (internal_status, internal_fragment) = call(&state, internal).await;
+    assert_eq!(internal_status, StatusCode::OK);
+    assert!(
+        internal_fragment.contains("vault.w33d.xyz"),
+        "the gateway-attested internal view keeps useful audit targets"
+    );
+}
+
+#[tokio::test]
+async fn dashboard_defines_no_mutation_route() {
+    let state = state_with(
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+    );
+    let request = Request::builder()
+        .method("POST")
+        .uri("/")
+        .body(Body::empty())
+        .unwrap();
+    let (status, _) = call(&state, request).await;
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[tokio::test]
 async fn dashboard_incident_banner_uses_down_variant() {
     let beacon = fake_service(&[(
         "/api/status",
@@ -404,6 +578,10 @@ async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
         html.contains("27 apps"),
         "all internal consoles are in one section"
     );
+    assert!(
+        html.contains("27 management surfaces") && html.contains("Internal zone"),
+        "the gateway-attested WireGuard plane is summarized"
+    );
 
     for (name, url) in [
         ("Authorization", "https://authz.w33d.xyz"),
@@ -466,6 +644,7 @@ async fn dashboard_public_gateway_zone_is_byte_identical_without_mgmt() {
 
     for forbidden in [
         "Infrastructure &amp; Operations",
+        "27 management surfaces",
         "https://authz.w33d.xyz",
         "https://vault.w33d.xyz",
         "https://vpn.w33d.xyz",
@@ -476,6 +655,11 @@ async fn dashboard_public_gateway_zone_is_byte_identical_without_mgmt() {
             "{forbidden} is absent from public dashboard"
         );
     }
+    assert!(
+        missing.contains("WireGuard required")
+            && missing.contains("Management hostnames stay hidden"),
+        "external users see the access contract without internal route disclosure"
+    );
 }
 
 #[tokio::test]
