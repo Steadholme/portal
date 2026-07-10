@@ -89,22 +89,35 @@ fn gateway_key() -> &'static str {
         .as_str()
 }
 
-/// Verify the gateway-injected identity is authentic. When `GATEWAY_HMAC_KEY` is set AND an
-/// identity (`X-Auth-Subject`) is present, a valid `X-Auth-Sig` — HMAC-SHA256 over
-/// `subject "\n" groups "\n" minute` for the current OR previous minute — is REQUIRED; a rogue
-/// peer that POSTs `X-Auth-Subject` directly (bypassing Sluice) cannot forge it. Returns:
-/// - `true` when the key is unset (verification off), or no identity header is present
-///   (public/dev path), or the signature is valid;
-/// - `false` when an identity is present but the signature is missing or invalid (=> 401).
+/// Verify the gateway-injected identity is authentic. When `GATEWAY_HMAC_KEY` is set AND ANY
+/// gateway identity header (`X-Auth-Subject` / `X-Auth-Groups` / `X-Auth-Email`) is present, a
+/// valid `X-Auth-Sig` — HMAC-SHA256 over `subject "\n" groups "\n" minute` for the current OR
+/// previous minute — is REQUIRED. Absent fields hash as the empty string; since Sluice always
+/// injects `X-Auth-Subject` together with `X-Auth-Groups`, a rogue peer that POSTs only
+/// `X-Auth-Groups: admins` (no subject, no sig) to reach `/ops` cannot produce a matching
+/// signature and is rejected. Returns:
+/// - `true` when the key is unset (verification off), or NO identity header is present
+///   (public/healthz/dev path), or the signature is valid;
+/// - `false` when any identity header is present but the signature is missing or invalid (=> 401).
 pub fn gateway_identity_ok(headers: &HeaderMap) -> bool {
-    let key = gateway_key();
+    gateway_identity_ok_with(gateway_key(), headers)
+}
+
+/// Core verification, parameterized on `key` so tests can exercise the key-set branches without
+/// touching the process-global `GATEWAY_HMAC_KEY` ([`gateway_key`]'s `OnceLock`).
+fn gateway_identity_ok_with(key: &str, headers: &HeaderMap) -> bool {
     if key.is_empty() {
-        return true;
+        return true; // verification disabled (no GATEWAY_HMAC_KEY) — pre-signature behavior
     }
-    let Some(subject) = header_value(headers, HEADER_SUBJECT) else {
-        return true; // no injected identity to verify (public route / local dev)
-    };
+    let subject = header_value(headers, HEADER_SUBJECT).unwrap_or_default();
     let groups = header_value(headers, HEADER_GROUPS).unwrap_or_default();
+    let has_email = header_value(headers, HEADER_EMAIL).is_some();
+    if subject.is_empty() && groups.is_empty() && !has_email {
+        return true; // no injected identity to verify (public route / healthz / local dev)
+    }
+    // An identity header is present => a valid signature is mandatory. The MAC covers
+    // `subject "\n" groups "\n" minute`; omitting the subject does not help an attacker because
+    // Sluice signs subject + groups together, so a groups-only forgery cannot match.
     let Some(sig) = header_value(headers, HEADER_SIG) else {
         return false; // identity present but unsigned — reject
     };
@@ -189,6 +202,44 @@ mod tests {
         let mut h = HeaderMap::new();
         h.insert(HEADER_SUBJECT, HeaderValue::from_static("user-42"));
         assert!(gateway_identity_ok(&h));
+    }
+
+    #[test]
+    fn gateway_rejects_groups_only_forgery() {
+        // C5 regression: with the key set, a forged `X-Auth-Groups: admins` carrying NO subject
+        // and NO signature must be REJECTED — otherwise it would sail through to the /ops admin
+        // gate (which only reads groups). Pre-fix this returned true (fail-open on missing subject).
+        let mut h = HeaderMap::new();
+        h.insert(HEADER_GROUPS, HeaderValue::from_static("admins"));
+        assert!(!gateway_identity_ok_with("test-key", &h));
+    }
+
+    #[test]
+    fn gateway_rejects_identity_without_sig() {
+        // Subject + groups present but unsigned => reject.
+        let mut h = HeaderMap::new();
+        h.insert(HEADER_SUBJECT, HeaderValue::from_static("usr_eve"));
+        h.insert(HEADER_GROUPS, HeaderValue::from_static("admins"));
+        assert!(!gateway_identity_ok_with("test-key", &h));
+    }
+
+    #[test]
+    fn gateway_accepts_valid_signature() {
+        // A genuinely gateway-signed identity (current minute window) is accepted.
+        let (subject, groups) = ("usr_alice", "admins");
+        let win = now_unix() / 60;
+        let sig = sign_identity("test-key", subject, groups, win);
+        let mut h = HeaderMap::new();
+        h.insert(HEADER_SUBJECT, HeaderValue::from_str(subject).unwrap());
+        h.insert(HEADER_GROUPS, HeaderValue::from_str(groups).unwrap());
+        h.insert(HEADER_SIG, HeaderValue::from_str(&sig).unwrap());
+        assert!(gateway_identity_ok_with("test-key", &h));
+    }
+
+    #[test]
+    fn gateway_ok_no_identity_headers_even_with_key() {
+        // Public/healthz path: no X-Auth-* at all => nothing to verify, ok even with key set.
+        assert!(gateway_identity_ok_with("test-key", &HeaderMap::new()));
     }
 
     #[test]
