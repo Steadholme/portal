@@ -17,6 +17,7 @@ pub mod catalog;
 pub mod config;
 pub mod handlers;
 pub mod http;
+pub mod manifest;
 pub mod snapshot;
 pub mod vitals;
 pub mod watchtower;
@@ -79,11 +80,12 @@ pub fn build_dev_state() -> AppState {
 }
 
 /// Build runtime state from the environment. [`Config`] comes from [`Config::from_env`]
-/// (env overrides for `BIND_ADDR` / `BEACON_URL` / `PORTAL_CATALOG`). Async only to match
-/// the rest of the stack's `main` seam; Portal does no startup IO so it cannot fail.
+/// (env overrides plus the optional, paired Experience projections). Production projection IO
+/// and contract validation happen here and fail startup closed; async keeps the shared main seam.
 pub async fn build_state_from_env() -> Result<AppState, String> {
+    let config = Config::from_env()?;
     Ok(AppState {
-        config: Arc::new(Config::from_env()),
+        config: Arc::new(config),
         cache: SnapshotCache::new(CACHE_TTL),
     })
 }

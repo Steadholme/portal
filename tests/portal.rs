@@ -10,8 +10,12 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use hmac::{Hmac, Mac};
+use portal::auth::{GatewayZoneVerifier, HEADER_GATEWAY_ZONE, HEADER_GATEWAY_ZONE_SIG};
 use portal::config::Config;
+use portal::manifest::{parse_projection, ProjectionAudience};
 use portal::{app, build_dev_state, AppState};
+use sha2::Sha256;
 use tower::ServiceExt;
 
 // --- HTTP helpers ----------------------------------------------------------------------
@@ -66,6 +70,76 @@ fn state_with(beacon: &str, vitals: &str, watchtower: &str) -> AppState {
     let mut state = build_dev_state();
     state.config = Arc::new(config);
     state
+}
+
+fn manifest_projection(audience: &str, id: &str, name: &str, url: &str) -> String {
+    let fingerprint = if audience == "public" {
+        "a".repeat(64)
+    } else {
+        "b".repeat(64)
+    };
+    format!(
+        r#"{{"schemaVersion":"holdfast.experience-projection.v1","release":"1.0.0","fingerprint":"sha256:{fingerprint}","audience":"{audience}","surfaces":[{{"id":"{id}","name":"{name}","description":"Manifest-owned surface","url":"{url}","category":"platform","icon":"grid","statusComponent":"Example","profile":"control","capabilities":["launch"],"comingSoon":false}}]}}"#
+    )
+}
+
+fn manifest_state() -> AppState {
+    let public = parse_projection(
+        &manifest_projection(
+            "public",
+            "mail-web",
+            "Manifest Mail",
+            "https://mail.w33d.xyz",
+        ),
+        ProjectionAudience::Public,
+    )
+    .unwrap();
+    let estate = parse_projection(
+        &manifest_projection(
+            "estate",
+            "vault-ops",
+            "Manifest Vault",
+            "https://vault.w33d.xyz",
+        ),
+        ProjectionAudience::Estate,
+    )
+    .unwrap();
+    let mut config = Config::dev();
+    config.beacon_url = "http://127.0.0.1:1".to_string();
+    config.vitals_url = "http://127.0.0.1:1".to_string();
+    config.watchtower_url = "http://127.0.0.1:1".to_string();
+    config.catalog = public.catalog;
+    config.internal_catalog = estate.catalog;
+    config.public_projection = Some(public.identity);
+    config.estate_projection = Some(estate.identity);
+    config.zone_verifier = GatewayZoneVerifier::new("test-key");
+    let mut state = build_dev_state();
+    state.config = Arc::new(config);
+    state
+}
+
+fn zone_signature(key: &str, host: &str, zone: &str, window: i64) -> String {
+    let mut mac = Hmac::<Sha256>::new_from_slice(key.as_bytes()).unwrap();
+    mac.update(b"holdfast.gateway-zone.v1\n");
+    mac.update(b"portal-root\n");
+    mac.update(host.as_bytes());
+    mac.update(b"\n");
+    mac.update(zone.as_bytes());
+    mac.update(b"\n");
+    mac.update(window.to_string().as_bytes());
+    mac.finalize()
+        .into_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn current_minute() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        / 60
 }
 
 /// Spawn a fake JSON service that answers every connection by matching the request path
@@ -365,6 +439,97 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
 }
 
 #[tokio::test]
+async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
+    let state = manifest_state();
+
+    let external = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Auth-Email", "alice@holdfast.local")
+        .body(Body::empty())
+        .unwrap();
+    let (status, public_html) = call(&state, external).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(public_html.contains("Manifest Mail"));
+    assert!(public_html.contains(r#"data-product-id="mail-web""#));
+    assert!(public_html.contains(r#"data-ody-profile="control""#));
+    assert!(public_html.contains(r#"data-manifest-audience="public""#));
+    assert!(public_html.contains(r#"data-manifest-surface-count="1""#));
+    assert!(public_html.contains(&format!("sha256:{}", "a".repeat(64))));
+    for secret in [
+        "Manifest Vault",
+        "vault.w33d.xyz",
+        "vault-ops",
+        &format!("sha256:{}", "b".repeat(64)),
+        r#"data-manifest-audience="estate""#,
+    ] {
+        assert!(
+            !public_html.contains(secret),
+            "external response leaked {secret}"
+        );
+    }
+
+    let valid_sig = zone_signature("test-key", "w33d.xyz", "internal", current_minute());
+    let internal = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Auth-Email", "alice@holdfast.local")
+        .header(HEADER_GATEWAY_ZONE, "internal")
+        .header(HEADER_GATEWAY_ZONE_SIG, valid_sig.clone())
+        .body(Body::empty())
+        .unwrap();
+    let (status, internal_html) = call(&state, internal).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(internal_html.contains("Manifest Mail"));
+    assert!(internal_html.contains("Manifest Vault"));
+    assert!(internal_html.contains(r#"data-product-id="vault-ops""#));
+    assert!(internal_html.contains(r#"data-manifest-surface-count="2""#));
+    assert!(internal_html.contains(r#"data-manifest-audience="public""#));
+    assert!(internal_html.contains(r#"data-manifest-audience="estate""#));
+    assert!(internal_html.contains(&format!("sha256:{}", "a".repeat(64))));
+    assert!(internal_html.contains(&format!("sha256:{}", "b".repeat(64))));
+
+    let downgraded = [
+        Request::builder()
+            .uri("/")
+            .header("Host", "w33d.xyz")
+            .header(HEADER_GATEWAY_ZONE, "internal")
+            .body(Body::empty())
+            .unwrap(),
+        Request::builder()
+            .uri("/")
+            .header("Host", "w33d.xyz")
+            .header(HEADER_GATEWAY_ZONE, "internal")
+            .header(HEADER_GATEWAY_ZONE_SIG, "forged")
+            .body(Body::empty())
+            .unwrap(),
+        Request::builder()
+            .uri("/")
+            .header("Host", "evil.example")
+            .header(HEADER_GATEWAY_ZONE, "internal")
+            .header(HEADER_GATEWAY_ZONE_SIG, valid_sig)
+            .body(Body::empty())
+            .unwrap(),
+        Request::builder()
+            .uri("/")
+            .header("Host", "w33d.xyz")
+            .header(HEADER_GATEWAY_ZONE, "external")
+            .header(HEADER_GATEWAY_ZONE_SIG, "forged")
+            .header("X-Wire", "1")
+            .body(Body::empty())
+            .unwrap(),
+    ];
+    for request in downgraded {
+        let (status, html) = call(&state, request).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(!html.contains("Manifest Vault"));
+        assert!(!html.contains("vault.w33d.xyz"));
+        assert!(!html.contains(&format!("sha256:{}", "b".repeat(64))));
+        assert!(html.contains(&format!("sha256:{}", "a".repeat(64))));
+    }
+}
+
+#[tokio::test]
 async fn dashboard_wire_response_is_exact_read_only_live_region() {
     let state = state_with(
         "http://127.0.0.1:1",
@@ -385,7 +550,7 @@ async fn dashboard_wire_response_is_exact_read_only_live_region() {
     );
     assert_eq!(
         response.headers().get("vary").unwrap(),
-        "X-Wire, X-Gateway-Zone, X-Auth-Email"
+        "X-Wire, X-Gateway-Zone, X-Gateway-Zone-Sig, X-Auth-Email"
     );
     assert!(response
         .headers()

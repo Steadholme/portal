@@ -14,6 +14,12 @@ pub const HEADER_GROUPS: &str = "x-auth-groups";
 /// HMAC binding the injected identity to a 1-minute window (set by Sluice when GATEWAY_HMAC_KEY
 /// is configured). See [`gateway_identity_ok`].
 pub const HEADER_SIG: &str = "x-auth-sig";
+/// Gateway-attested network plane and its independent minute-window HMAC.
+pub const HEADER_GATEWAY_ZONE: &str = "x-gateway-zone";
+pub const HEADER_GATEWAY_ZONE_SIG: &str = "x-gateway-zone-sig";
+pub const GATEWAY_ZONE_INTERNAL: &str = "internal";
+pub const DEFAULT_CANONICAL_ROUTE: &str = "portal-root";
+pub const DEFAULT_CANONICAL_HOST: &str = "w33d.xyz";
 
 /// The signed-in user's email, if the gateway injected one. `None` when absent or blank
 /// (e.g. a direct dev hit with no gateway in front), letting the caller fall back to a
@@ -73,6 +79,113 @@ pub fn require_admin(headers: &HeaderMap) -> Result<(), axum::http::StatusCode> 
     } else {
         Err(axum::http::StatusCode::FORBIDDEN)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Gateway network-zone signature — gates Estate's internal projection
+// ---------------------------------------------------------------------------
+
+/// Verifies Sluice's independent `X-Gateway-Zone-Sig` attestation without exposing the shared
+/// key through `Debug`. An empty key preserves local-development compatibility: the exact
+/// `internal` zone is accepted without a signature. Production loads the same non-empty
+/// independent `GATEWAY_ZONE_HMAC_KEY`; it is never shared with identity signing.
+#[derive(Clone)]
+pub struct GatewayZoneVerifier {
+    key: String,
+    expected_route: String,
+    expected_host: String,
+}
+
+impl Default for GatewayZoneVerifier {
+    fn default() -> Self {
+        Self::new("")
+    }
+}
+
+impl std::fmt::Debug for GatewayZoneVerifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GatewayZoneVerifier")
+            .field("enabled", &!self.key.is_empty())
+            .field("expected_route", &self.expected_route)
+            .field("expected_host", &self.expected_host)
+            .finish()
+    }
+}
+
+impl GatewayZoneVerifier {
+    pub fn new(key: impl Into<String>) -> Self {
+        Self::with_route_host(key, DEFAULT_CANONICAL_ROUTE, DEFAULT_CANONICAL_HOST)
+    }
+
+    fn with_route_host(
+        key: impl Into<String>,
+        expected_route: impl Into<String>,
+        expected_host: impl Into<String>,
+    ) -> Self {
+        Self {
+            key: key.into(),
+            expected_route: expected_route.into(),
+            expected_host: expected_host.into(),
+        }
+    }
+
+    /// True only for the exact internal zone and, when verification is enabled, a valid HMAC for
+    /// the current or previous epoch minute. Invalid/missing attestations downgrade to the public
+    /// projection; they never produce an error page or reveal Estate-only entries.
+    pub fn is_internal(&self, headers: &HeaderMap) -> bool {
+        gateway_zone_internal_with(
+            &self.key,
+            &self.expected_route,
+            &self.expected_host,
+            headers,
+            now_unix() / 60,
+        )
+    }
+}
+
+fn gateway_zone_internal_with(
+    key: &str,
+    expected_route: &str,
+    expected_host: &str,
+    headers: &HeaderMap,
+    window: i64,
+) -> bool {
+    let Some(zone) = header_value(headers, HEADER_GATEWAY_ZONE) else {
+        return false;
+    };
+    if zone != GATEWAY_ZONE_INTERNAL {
+        return false;
+    }
+    if key.is_empty() {
+        return true;
+    }
+    if !header_value(headers, "host").is_some_and(|host| host.eq_ignore_ascii_case(expected_host)) {
+        return false;
+    }
+    let Some(sig) = header_value(headers, HEADER_GATEWAY_ZONE_SIG) else {
+        return false;
+    };
+    [window, window - 1].iter().any(|&candidate| {
+        ct_eq(
+            sig.as_bytes(),
+            sign_gateway_zone(key, expected_route, expected_host, &zone, candidate).as_bytes(),
+        )
+    })
+}
+
+fn sign_gateway_zone(key: &str, route: &str, host: &str, zone: &str, window: i64) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    let mut mac = Hmac::<Sha256>::new_from_slice(key.as_bytes()).expect("HMAC accepts any key len");
+    mac.update(b"holdfast.gateway-zone.v1\n");
+    mac.update(route.as_bytes());
+    mac.update(b"\n");
+    mac.update(host.as_bytes());
+    mac.update(b"\n");
+    mac.update(zone.as_bytes());
+    mac.update(b"\n");
+    mac.update(window.to_string().as_bytes());
+    to_hex(&mac.finalize().into_bytes())
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +347,105 @@ mod tests {
         h.insert(HEADER_GROUPS, HeaderValue::from_str(groups).unwrap());
         h.insert(HEADER_SIG, HeaderValue::from_str(&sig).unwrap());
         assert!(gateway_identity_ok_with("test-key", &h));
+    }
+
+    #[test]
+    fn gateway_zone_signature_matches_sluice_vector() {
+        assert_eq!(
+            sign_gateway_zone("test-key", "portal-root", "w33d.xyz", "internal", 1),
+            "3467eb3d618ce5a1d3a0c703f78f3f89f3fb5d80586b78a258fb07352b53f4e3"
+        );
+    }
+
+    #[test]
+    fn internal_zone_requires_valid_current_or_previous_signature() {
+        let mut headers = HeaderMap::new();
+        headers.insert(HEADER_GATEWAY_ZONE, HeaderValue::from_static("internal"));
+
+        assert!(gateway_zone_internal_with(
+            "",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
+        assert!(!gateway_zone_internal_with(
+            "test-key",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
+        headers.insert("host", HeaderValue::from_static("w33d.xyz"));
+
+        headers.insert(
+            HEADER_GATEWAY_ZONE_SIG,
+            HeaderValue::from_static("not-a-valid-signature"),
+        );
+        assert!(!gateway_zone_internal_with(
+            "test-key",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
+
+        let current = sign_gateway_zone("test-key", "portal-root", "w33d.xyz", "internal", 10);
+        headers.insert(
+            HEADER_GATEWAY_ZONE_SIG,
+            HeaderValue::from_str(&current).unwrap(),
+        );
+        assert!(gateway_zone_internal_with(
+            "test-key",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
+
+        let previous = sign_gateway_zone("test-key", "portal-root", "w33d.xyz", "internal", 9);
+        headers.insert(
+            HEADER_GATEWAY_ZONE_SIG,
+            HeaderValue::from_str(&previous).unwrap(),
+        );
+        assert!(gateway_zone_internal_with(
+            "test-key",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
+
+        let wrong_route = sign_gateway_zone("test-key", "other-route", "w33d.xyz", "internal", 10);
+        headers.insert(
+            HEADER_GATEWAY_ZONE_SIG,
+            HeaderValue::from_str(&wrong_route).unwrap(),
+        );
+        assert!(!gateway_zone_internal_with(
+            "test-key",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
+
+        headers.insert("host", HeaderValue::from_static("evil.example"));
+        assert!(!gateway_zone_internal_with(
+            "test-key",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
+
+        headers.insert(HEADER_GATEWAY_ZONE, HeaderValue::from_static("external"));
+        assert!(!gateway_zone_internal_with(
+            "test-key",
+            "portal-root",
+            "w33d.xyz",
+            &headers,
+            10
+        ));
     }
 
     #[test]

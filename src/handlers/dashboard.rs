@@ -20,19 +20,18 @@ use odyssey::{RuntimeOpts, WireOpts, WireSwap};
 use serde::Deserialize;
 
 use crate::auth;
-use crate::catalog::{mgmt_catalog, CatalogEntry};
+use crate::catalog::CatalogEntry;
 use crate::handlers::{
     app_css, esc, fmt_pct, greeting, icon_for, name_from_email, pct_width, rel_time,
     severity_dot_class, status_label, status_pill_class, SHIELD_SVG,
 };
+use crate::manifest::ProjectionIdentity;
 use crate::snapshot::Snapshot;
 use crate::watchtower::{Event, Verify};
 use crate::AppState;
 
 const DASHBOARD_HTML: &str = include_str!("../../templates/dashboard.html");
-const HEADER_GATEWAY_ZONE: &str = "x-gateway-zone";
 const HEADER_WIRE: &str = "x-wire";
-const GATEWAY_ZONE_INTERNAL: &str = "internal";
 const MGMT_SECTION_ID: &str = "infraops";
 const MGMT_SECTION_LABEL: &str = "Infrastructure & Operations";
 const MGMT_SECTION_STYLE: &str = "more";
@@ -41,6 +40,22 @@ const MGMT_SECTION_STYLE: &str = "more";
 pub struct DashQuery {
     #[serde(default)]
     q: String,
+}
+
+#[derive(Clone, Copy)]
+struct CatalogView<'a> {
+    public: &'a [CatalogEntry],
+    internal: Option<&'a [CatalogEntry]>,
+    public_projection: Option<&'a ProjectionIdentity>,
+    estate_projection: Option<&'a ProjectionIdentity>,
+}
+
+#[derive(Clone, Copy)]
+struct EstateSummary<'a> {
+    public_surface_count: usize,
+    internal_surface_count: Option<usize>,
+    public_projection: Option<&'a ProjectionIdentity>,
+    estate_projection: Option<&'a ProjectionIdentity>,
 }
 
 /// `GET /` — the command center. Renders for any request the gateway forwards; the signed-in
@@ -52,13 +67,20 @@ pub async fn dashboard(
     headers: HeaderMap,
 ) -> Response {
     let email = auth::signed_in_email(&headers).unwrap_or_else(|| "operator".to_string());
-    let internal_zone = gateway_zone_internal(&headers);
+    let internal_zone = state.config.zone_verifier.is_internal(&headers);
     let wire_fragment = wire_request(&headers);
     let snap = state.cache.get(&state.config).await;
     let clock = clock();
+    let internal_catalog = internal_zone.then(|| state.config.internal_catalog.as_slice());
     let body = render(
-        &state.config.catalog,
-        internal_zone,
+        CatalogView {
+            public: &state.config.catalog,
+            internal: internal_catalog,
+            public_projection: state.config.public_projection.as_ref(),
+            estate_projection: internal_zone
+                .then_some(state.config.estate_projection.as_ref())
+                .flatten(),
+        },
         &email,
         &snap,
         clock,
@@ -72,19 +94,9 @@ pub async fn dashboard(
     );
     response.headers_mut().insert(
         header::VARY,
-        HeaderValue::from_static("X-Wire, X-Gateway-Zone, X-Auth-Email"),
+        HeaderValue::from_static("X-Wire, X-Gateway-Zone, X-Gateway-Zone-Sig, X-Auth-Email"),
     );
     response
-}
-
-fn gateway_zone_internal(headers: &HeaderMap) -> bool {
-    matches!(
-        headers
-            .get(HEADER_GATEWAY_ZONE)
-            .and_then(|v| v.to_str().ok())
-            .map(str::trim),
-        Some(GATEWAY_ZONE_INTERNAL)
-    )
 }
 
 fn wire_request(headers: &HeaderMap) -> bool {
@@ -108,14 +120,19 @@ fn clock() -> (i64, u32) {
 }
 
 fn render(
-    catalog: &[CatalogEntry],
-    internal_zone: bool,
+    view: CatalogView<'_>,
     email: &str,
     snap: &Snapshot,
     clock: (i64, u32),
     search_query: &str,
     wire_fragment: bool,
 ) -> String {
+    let CatalogView {
+        public: catalog,
+        internal: internal_catalog,
+        public_projection,
+        estate_projection,
+    } = view;
     let (now_secs, hour) = clock;
     let public_surface_count = catalog.len();
     let name = name_from_email(email);
@@ -133,20 +150,14 @@ fn render(
         Some(filter_catalog(catalog, &q_lower))
     };
     let catalog = filtered_catalog.as_deref().unwrap_or(catalog);
-    let mgmt = if internal_zone {
-        Some(mgmt_catalog())
-    } else {
-        None
-    };
-    let internal_surface_count = mgmt.as_ref().map(Vec::len);
+    let internal_surface_count = internal_catalog.map(|entries| entries.len());
     let filtered_mgmt = if q.is_empty() {
         None
     } else {
-        mgmt.as_deref()
-            .map(|entries| filter_catalog(entries, &q_lower))
+        internal_catalog.map(|entries| filter_catalog(entries, &q_lower))
     };
     let mgmt = if q.is_empty() {
-        mgmt.as_deref()
+        internal_catalog
     } else {
         filtered_mgmt.as_deref()
     };
@@ -157,8 +168,12 @@ fn render(
         snap,
         now_secs,
         hour,
-        public_surface_count,
-        internal_surface_count,
+        EstateSummary {
+            public_surface_count,
+            internal_surface_count,
+            public_projection,
+            estate_projection,
+        },
     );
     if wire_fragment {
         return estate_live;
@@ -290,9 +305,14 @@ fn render_estate_live(
     snap: &Snapshot,
     now_secs: i64,
     hour: u32,
-    public_surface_count: usize,
-    internal_surface_count: Option<usize>,
+    summary: EstateSummary<'_>,
 ) -> String {
+    let EstateSummary {
+        public_surface_count,
+        internal_surface_count,
+        public_projection,
+        estate_projection,
+    } = summary;
     let refresh = odyssey::link_with_wire(
         "/?refresh=1#estate-live",
         "Refresh snapshot",
@@ -318,6 +338,7 @@ fn render_estate_live(
       <h2 id="estate-title">One estate, three trust paths</h2>
     </div>
     <div class="estate-deck__actions">
+      {manifest}
       {signal}
       <span class="estate-refresh">{refresh}</span>
     </div>
@@ -345,11 +366,46 @@ fn render_estate_live(
         greeting = greeting(hour),
         name = esc(name),
         sub = hero_sub(snap),
+        manifest = render_manifest_signal(
+            public_projection,
+            estate_projection,
+            public_surface_count + internal_surface_count.unwrap_or(0),
+        ),
         signal = fleet_signal(snap),
         refresh = refresh,
         planes = render_access_planes(public_surface_count, internal_surface_count),
         metrics = render_metrics(snap),
         activity = render_activity(&snap.events, now_secs, internal_surface_count.is_some(),),
+    )
+}
+
+fn render_manifest_signal(
+    public: Option<&ProjectionIdentity>,
+    estate: Option<&ProjectionIdentity>,
+    surface_count: usize,
+) -> String {
+    let Some(public) = public else {
+        return r#"<span class="estate-signal estate-signal--manifest"><span aria-hidden="true"></span>Built-in development catalog</span>"#.to_string();
+    };
+    let mut identities = vec![render_projection_identity("public", public)];
+    if let Some(estate) = estate {
+        identities.push(render_projection_identity("estate", estate));
+    }
+    format!(
+        r#"<span class="estate-signal estate-signal--manifest" data-manifest-surface-count="{surface_count}"><span aria-hidden="true"></span>Manifest {release} · {surface_count} surfaces · {identities}</span>"#,
+        release = esc(&public.release),
+        identities = identities.join(" · "),
+    )
+}
+
+fn render_projection_identity(audience: &str, identity: &ProjectionIdentity) -> String {
+    let short: String = identity.fingerprint.chars().take(18).collect();
+    format!(
+        r#"<span data-manifest-audience="{audience}" data-manifest-release="{release}" data-manifest-fingerprint="{fingerprint}" title="{audience} projection · {release} · {fingerprint}">{audience} {short}</span>"#,
+        audience = esc(audience),
+        release = esc(&identity.release),
+        fingerprint = esc(&identity.fingerprint),
+        short = esc(&short),
     )
 }
 
@@ -373,7 +429,7 @@ fn fleet_signal(snap: &Snapshot) -> String {
 }
 
 /// Access-plane copy comes only from the configured public catalog, the exact gateway-attested
-/// zone, and the checked-in management catalog. The external view never receives management URLs.
+/// zone, and the Estate projection. The external view never receives management URLs.
 fn render_access_planes(
     public_surface_count: usize,
     internal_surface_count: Option<usize>,
@@ -567,8 +623,18 @@ const MIN_SECTION: usize = 3;
 
 /// Map a tile's display name to its section key. Unknown names land in "more" so a newly
 /// added service still renders cleanly without a code change.
-fn category_key(name: &str) -> &'static str {
-    match name {
+fn category_key(entry: &CatalogEntry) -> &'static str {
+    match entry.category.as_str() {
+        "communication" => return "comms",
+        "content" => return "content",
+        "identity" => return "ident",
+        "observability" => return "obs",
+        "ai" => return "ai",
+        "developer" => return "dev",
+        "platform" => return "more",
+        _ => {}
+    }
+    match entry.name.as_str() {
         "Identity" | "Authorization" | "Directory" | "Audit" | "Vault" | "Threat Intel"
         | "Intel" | "Canary" | "Authz" | "People" | "Pulse" | "Risk" | "Sigil" | "SPIFFE"
         | "Crucible" | "Detonate" | "Phantom" | "Purple" | "Guard" => "ident",
@@ -596,7 +662,7 @@ fn grouped_catalog<'a>(
         .map(|(key, label)| (*key, *label, Vec::new()))
         .collect();
     for entry in catalog {
-        let key = category_key(&entry.name);
+        let key = category_key(entry);
         if let Some((_, _, apps)) = buckets
             .iter_mut()
             .find(|(bucket_key, _, _)| *bucket_key == key)
@@ -702,7 +768,7 @@ fn render_app_section(
 /// One app chiclet: a category-tinted icon tile, the app name + description, and a live status
 /// dot (top-right). Coming-soon services show a "Soon" badge and an accent dot.
 fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
-    let cat = category_key(&entry.name);
+    let cat = category_key(entry);
     let soon_badge = if entry.coming_soon {
         r#"<span class="app__soon">Soon</span>"#.to_string()
     } else {
@@ -727,6 +793,16 @@ fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
     // Lowercased name+description backs the client-side app search filter.
     let data_name = esc(&format!("{} {}", entry.name, entry.description).to_lowercase());
     let app_id = esc(&entry.url);
+    let product_id = if entry.id.is_empty() {
+        app_id.clone()
+    } else {
+        esc(&entry.id)
+    };
+    let profile = if entry.profile.is_empty() {
+        String::new()
+    } else {
+        format!(r#" data-ody-profile="{}""#, esc(&entry.profile))
+    };
     let pin_label = esc(&format!("Pin {}", entry.name));
     let tooltip = if entry.description.is_empty() {
         esc(&entry.name)
@@ -734,8 +810,8 @@ fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
         esc(&format!("{} — {}", entry.name, entry.description))
     };
     format!(
-        r#"<div class="appwrap" data-app-id="{id}">
-<a class="app app--{cat}" href="{url}" title="{tooltip}" data-name="{dn}" data-app-id="{id}">
+        r#"<div class="appwrap" data-app-id="{id}" data-product-id="{product_id}">
+<a class="app app--{cat}" href="{url}" title="{tooltip}" data-name="{dn}" data-app-id="{id}" data-product-id="{product_id}"{profile}>
   {soon}
   {status}
   <span class="app__icon" aria-hidden="true">{icon}</span>
@@ -747,6 +823,8 @@ fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
 </button>
 </div>"#,
         id = app_id,
+        product_id = product_id,
+        profile = profile,
         cat = cat,
         url = esc(&entry.url),
         tooltip = tooltip,
@@ -825,8 +903,12 @@ mod tests {
         let catalog = crate::catalog::default_catalog();
         let snapshot = Snapshot::default();
         let full = render(
-            &catalog,
-            false,
+            CatalogView {
+                public: &catalog,
+                internal: None,
+                public_projection: None,
+                estate_projection: None,
+            },
             "alice@holdfast.local",
             &snapshot,
             (1_700_000_000, 8),
@@ -834,8 +916,12 @@ mod tests {
             false,
         );
         let fragment = render(
-            &catalog,
-            false,
+            CatalogView {
+                public: &catalog,
+                internal: None,
+                public_projection: None,
+                estate_projection: None,
+            },
             "alice@holdfast.local",
             &snapshot,
             (1_700_000_000, 8),
@@ -875,6 +961,32 @@ mod tests {
             !internal.contains("vault.w33d.xyz"),
             "summary never invents a route list"
         );
+    }
+
+    #[test]
+    fn manifest_signal_discloses_only_the_identities_for_the_current_view() {
+        let public = ProjectionIdentity {
+            release: "1.0.0".to_string(),
+            fingerprint: format!("sha256:{}", "a".repeat(64)),
+        };
+        let estate = ProjectionIdentity {
+            release: "1.0.0".to_string(),
+            fingerprint: format!("sha256:{}", "b".repeat(64)),
+        };
+
+        let external = render_manifest_signal(Some(&public), None, 23);
+        assert!(external.contains(r#"data-manifest-surface-count="23""#));
+        assert!(external.contains(r#"data-manifest-audience="public""#));
+        assert!(external.contains(&public.fingerprint));
+        assert!(!external.contains(r#"data-manifest-audience="estate""#));
+        assert!(!external.contains(&estate.fingerprint));
+
+        let internal = render_manifest_signal(Some(&public), Some(&estate), 50);
+        assert!(internal.contains(r#"data-manifest-surface-count="50""#));
+        assert!(internal.contains(r#"data-manifest-audience="public""#));
+        assert!(internal.contains(r#"data-manifest-audience="estate""#));
+        assert!(internal.contains(&public.fingerprint));
+        assert!(internal.contains(&estate.fingerprint));
     }
 
     #[test]

@@ -26,6 +26,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-uti
 # (De)serialize the PORTAL_CATALOG override + the parsed Beacon status snapshot.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Experience projection releases use the same strict SemVer parser as manifestctl.
+semver = "1"
 # Ergonomic IO error wrapping for the Beacon fetch.
 thiserror = "2"
 # Structured logging.

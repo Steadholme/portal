@@ -213,6 +213,8 @@
           cls = link.getAttribute('class') || '';
       return {
         id: link.getAttribute('data-app-id') || link.getAttribute('href') || link.href,
+        productId: link.getAttribute('data-product-id') || '',
+        profile: link.getAttribute('data-ody-profile') || '',
         href: link.getAttribute('href') || link.href,
         name: name,
         desc: desc,
@@ -298,10 +300,13 @@
           desc = document.createElement('span');
       wrap.className = 'appwrap appwrap--compact';
       wrap.setAttribute('data-app-id', app.id);
+      if (app.productId) wrap.setAttribute('data-product-id', app.productId);
       link.className = app.className + ' app--compact';
       link.href = app.href;
       link.title = app.desc ? app.name + ' — ' + app.desc : app.name;
       link.setAttribute('data-app-id', app.id);
+      if (app.productId) link.setAttribute('data-product-id', app.productId);
+      if (app.profile) link.setAttribute('data-ody-profile', app.profile);
       link.setAttribute('data-name', app.text);
       if (soon) link.appendChild(soon.cloneNode(true));
       if (status) link.appendChild(status.cloneNode(true));
@@ -445,6 +450,8 @@
         item.href = app.href;
         item.setAttribute('role', 'option');
         item.setAttribute('data-app-id', app.id);
+        if (app.productId) item.setAttribute('data-product-id', app.productId);
+        if (app.profile) item.setAttribute('data-ody-profile', app.profile);
         if (icon) item.appendChild(icon.cloneNode(true));
         body.className = 'palette__copy';
         name.className = 'palette__name';

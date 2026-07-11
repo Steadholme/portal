@@ -283,6 +283,7 @@
   border-radius:var(--r-pill); font-size:11.5px; font-weight:650; white-space:nowrap;
 }
 .estate-signal > span { width:7px; height:7px; border-radius:50%; background:var(--unknown); }
+.estate-signal--manifest > span { background:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
 .estate-signal--ok > span { background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
 .estate-signal--warn > span { background:var(--warn); box-shadow:0 0 0 3px var(--warn-soft); }
 .estate-refresh > a {

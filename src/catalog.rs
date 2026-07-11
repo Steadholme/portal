@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 /// One dashboard tile. Field names match the `PORTAL_CATALOG` JSON override.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CatalogEntry {
+    /// Stable product/surface identity from Experience Manifest. Legacy `PORTAL_CATALOG`
+    /// entries may omit it; the renderer then keeps the URL-only app identity behavior.
+    #[serde(default)]
+    pub id: String,
     /// Display name (e.g. "Identity").
     pub name: String,
     /// The service's public subdomain the tile links to (e.g. `https://id.w33d.xyz`).
@@ -27,6 +31,16 @@ pub struct CatalogEntry {
     /// Inline-SVG icon key (see `handlers::icon_svg`); falls back to a generic glyph.
     #[serde(default)]
     pub icon: String,
+    /// Canonical Experience category. Empty keeps the legacy name-based grouping fallback.
+    #[serde(default)]
+    pub category: String,
+    /// Odyssey presentation profile selected by the canonical Manifest projection.
+    #[serde(default)]
+    pub profile: String,
+    /// Sorted declarative capability labels. Retained for inspection; Portal does not derive
+    /// behavior or authorization from them.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
     /// Mark a not-yet-live service: render a "Coming soon" tag instead of a live pill.
     #[serde(default)]
     pub coming_soon: bool,
@@ -44,11 +58,15 @@ pub struct CatalogEntry {
 pub fn default_catalog() -> Vec<CatalogEntry> {
     // (name, url, description, beacon component, icon key)
     let e = |name: &str, url: &str, description: &str, component: &str, icon: &str| CatalogEntry {
+        id: default_id(url),
         name: name.to_string(),
         url: url.to_string(),
         description: description.to_string(),
         component: component.to_string(),
         icon: icon.to_string(),
+        category: String::new(),
+        profile: String::new(),
+        capabilities: Vec::new(),
         coming_soon: false,
     };
     vec![
@@ -88,11 +106,15 @@ pub fn default_catalog() -> Vec<CatalogEntry> {
 pub fn mgmt_catalog() -> Vec<CatalogEntry> {
     // (name, url, description, beacon component, icon key)
     let e = |name: &str, url: &str, description: &str, component: &str, icon: &str| CatalogEntry {
+        id: default_id(url),
         name: name.to_string(),
         url: url.to_string(),
         description: description.to_string(),
         component: component.to_string(),
         icon: icon.to_string(),
+        category: String::new(),
+        profile: String::new(),
+        capabilities: Vec::new(),
         coming_soon: false,
     };
     vec![
@@ -124,6 +146,15 @@ pub fn mgmt_catalog() -> Vec<CatalogEntry> {
         e("Canary", "https://canary.w33d.xyz", "Canary tokens, honeypots and uptime tripwires.", "Canary", "canary"),
         e("VPN enrollment", "https://vpn.w33d.xyz", "WireGuard credential enrollment and bootstrap access.", "Mycelium", "mesh"),
     ]
+}
+
+fn default_id(url: &str) -> String {
+    url.strip_prefix("https://")
+        .unwrap_or(url)
+        .split(['/', '.', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// Parse a `PORTAL_CATALOG` JSON array (`[{"name","url","description"?,"component"?,
@@ -237,8 +268,12 @@ mod tests {
         let cat = parse_catalog(raw).expect("valid catalog JSON");
         assert_eq!(cat.len(), 2);
         // Optional fields default cleanly when omitted.
+        assert_eq!(cat[0].id, "");
         assert_eq!(cat[0].description, "");
         assert_eq!(cat[0].icon, "");
+        assert_eq!(cat[0].category, "");
+        assert_eq!(cat[0].profile, "");
+        assert!(cat[0].capabilities.is_empty());
         assert!(!cat[0].coming_soon);
         assert_eq!(cat[1].icon, "mail");
         assert!(cat[1].coming_soon);
