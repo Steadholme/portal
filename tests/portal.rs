@@ -322,6 +322,7 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
 
     assert!(html.contains(r#"<html lang="en" data-ody-profile="portal">"#));
     assert!(html.contains(r#"<body data-ody-shell="1.2">"#));
+    assert!(html.contains(r#"<link rel="icon" href="data:image/svg+xml,"#));
     assert!(
         html.contains("odyssey-wire v1"),
         "Wire runtime is vendored inline"
@@ -402,7 +403,7 @@ async fn dashboard_wire_response_is_exact_read_only_live_region() {
         r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title">"#
     ));
     assert!(
-        fragment.contains(r#"href="/#estate-live""#),
+        fragment.contains(r#"href="/?refresh=1#estate-live""#),
         "native GET fallback remains"
     );
     assert!(fragment.contains(r#"data-wire="get""#));
@@ -482,6 +483,20 @@ async fn dashboard_defines_no_mutation_route() {
         .unwrap();
     let (status, _) = call(&state, request).await;
     assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[tokio::test]
+async fn dashboard_refresh_fallback_returns_a_complete_document() {
+    let state = state_with(
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+    );
+    let (status, html) = call(&state, get("/?refresh=1")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.starts_with("<!DOCTYPE html>"));
+    assert!(html.contains(r#"id="estate-live""#));
+    assert!(html.contains(r#"id="appsections""#));
 }
 
 #[tokio::test]

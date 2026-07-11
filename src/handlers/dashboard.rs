@@ -294,7 +294,7 @@ fn render_estate_live(
     internal_surface_count: Option<usize>,
 ) -> String {
     let refresh = odyssey::link_with_wire(
-        "/#estate-live",
+        "/?refresh=1#estate-live",
         "Refresh snapshot",
         WireOpts::new("#estate-live")
             .select("#estate-live")
