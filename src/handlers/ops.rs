@@ -251,7 +251,12 @@ fn render(
     now_secs: i64,
 ) -> String {
     let name = name_from_email(email);
-    let initial = name.chars().next().unwrap_or('H').to_uppercase().to_string();
+    let initial = name
+        .chars()
+        .next()
+        .unwrap_or('H')
+        .to_uppercase()
+        .to_string();
 
     // Paginate the FILTERED result; an out-of-range page clamps to the last one.
     let pages = filtered.len().div_ceil(PAGE_SIZE).max(1);
@@ -276,7 +281,10 @@ fn render(
             "{{AUDIT_PAGER}}",
             &render_audit_pager(query, page, pages, filtered.len()),
         )
-        .replace("{{HEALTH_ROWS}}", &render_health_rows(&snap.statuses))
+        .replace(
+            "{{HEALTH_ROWS}}",
+            &render_health_rows(&snap.operator_statuses),
+        )
 }
 
 // --- Host metric tiles -----------------------------------------------------------------
@@ -614,14 +622,20 @@ mod tests {
         assert!(!parse_query("source=relay").matches(&ev, None, None));
         assert!(!parse_query("actor=bob").matches(&ev, None, None));
         assert!(!parse_query("action=login").matches(&ev, None, None));
-        assert!(parse_query("").matches(&ev, None, None), "no filters match all");
+        assert!(
+            parse_query("").matches(&ev, None, None),
+            "no filters match all"
+        );
     }
 
     #[test]
     fn matches_applies_time_bounds_in_ms() {
         let ev = event(5_000, "s", "a", "act");
         let q = parse_query("");
-        assert!(q.matches(&ev, Some(5_000), Some(5_000)), "bounds are inclusive");
+        assert!(
+            q.matches(&ev, Some(5_000), Some(5_000)),
+            "bounds are inclusive"
+        );
         assert!(!q.matches(&ev, Some(5_001), None), "below the lower bound");
         assert!(!q.matches(&ev, None, Some(4_999)), "above the upper bound");
     }
@@ -663,9 +677,18 @@ mod tests {
     fn filter_bar_echoes_values_escaped() {
         let q = parse_query("source=%3Cb%3E&actor=o%27hara&range=7d");
         let html = render_audit_filters(&q);
-        assert!(html.contains(r#"value="&lt;b&gt;""#), "source echoed escaped");
-        assert!(html.contains(r#"value="o&#x27;hara""#), "actor echoed escaped");
-        assert!(html.contains(r#"<option value="7d" selected>"#), "preset stays selected");
+        assert!(
+            html.contains(r#"value="&lt;b&gt;""#),
+            "source echoed escaped"
+        );
+        assert!(
+            html.contains(r#"value="o&#x27;hara""#),
+            "actor echoed escaped"
+        );
+        assert!(
+            html.contains(r#"<option value="7d" selected>"#),
+            "preset stays selected"
+        );
         assert!(!html.contains("<b>"), "no raw user HTML in the form");
     }
 
@@ -680,7 +703,10 @@ mod tests {
         assert!(html.contains("<details"), "uses a details/summary expander");
         assert!(html.contains("<dt>Seq</dt><dd>42</dd>"));
         assert!(html.contains("1700000000000 ms"), "raw timestamp shown");
-        assert!(html.contains("aa11") && html.contains("bb22"), "chain hashes shown");
+        assert!(
+            html.contains("aa11") && html.contains("bb22"),
+            "chain hashes shown"
+        );
         assert!(
             html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"),
             "detail payload escaped"

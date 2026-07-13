@@ -2,7 +2,8 @@
 //!
 //! The dashboard maps each catalog entry's `component` name to a status pill, and the metric
 //! row shows a "systems online" count. Both come from Beacon's machine-readable snapshot at
-//! `<BEACON_URL>/api/status` (the same JSON Beacon's public status page is built from).
+//! `<BEACON_URL>/api/status`. Portal fetches the same contract independently from public and
+//! operator projection endpoints, then selects one at the rendering trust boundary.
 //!
 //! RESILIENCE IS THE CONTRACT: every failure (DNS, connect, timeout, non-200, bad JSON)
 //! collapses to an EMPTY snapshot. Missing components render an "unknown" pill and the count

@@ -11,9 +11,12 @@ use crate::manifest::{load_projection_pair, ProjectionIdentity};
 
 /// Default listen address (all interfaces, internal-only port 8600).
 pub const DEFAULT_BIND_ADDR: &str = "0.0.0.0:8600";
-/// Default INTERNAL Beacon base URL. The dashboard appends `/api/status` to fetch the live
-/// component snapshot over the `holdfast` Docker network.
-pub const DEFAULT_BEACON_URL: &str = "http://beacon:8400";
+/// Default PUBLIC Beacon projection base URL. External dashboard responses append
+/// `/api/status` and may only render this deliberately reduced component snapshot.
+pub const DEFAULT_BEACON_PUBLIC_URL: &str = "http://beacon:8400";
+/// Default INTERNAL/operator Beacon base URL. Internal Estate and `/ops` responses append
+/// `/api/status` to fetch the full component snapshot over the `holdfast` Docker network.
+pub const DEFAULT_BEACON_URL: &str = "http://beacon:8401";
 /// Default INTERNAL Vitals base URL. The metric cards append `/api/metrics` for the latest
 /// host CPU / memory / load gauges.
 pub const DEFAULT_VITALS_URL: &str = "http://vitals:8300";
@@ -28,7 +31,11 @@ pub const EXPERIENCE_ESTATE_PROJECTION: &str = "EXPERIENCE_ESTATE_PROJECTION";
 pub struct Config {
     /// Listen address (`BIND_ADDR`).
     pub bind_addr: String,
-    /// INTERNAL Beacon base URL (`BEACON_URL`); the live-status fetch hits `<url>/api/status`.
+    /// PUBLIC Beacon projection base URL (`BEACON_PUBLIC_URL`); external live-status rendering
+    /// hits `<url>/api/status` and never reads the operator snapshot.
+    pub beacon_public_url: String,
+    /// INTERNAL/operator Beacon base URL (`BEACON_URL`); Estate and `/ops` live-status rendering
+    /// hits `<url>/api/status`.
     pub beacon_url: String,
     /// INTERNAL Vitals base URL (`VITALS_URL`); the metric cards hit `<url>/api/metrics`.
     pub vitals_url: String,
@@ -49,10 +56,11 @@ pub struct Config {
 }
 
 impl Config {
-    /// Default development configuration (default Beacon URL + default catalog).
+    /// Default development configuration (separate Beacon projections + default catalogs).
     pub fn dev() -> Self {
         Config {
             bind_addr: DEFAULT_BIND_ADDR.to_string(),
+            beacon_public_url: DEFAULT_BEACON_PUBLIC_URL.to_string(),
             beacon_url: DEFAULT_BEACON_URL.to_string(),
             vitals_url: DEFAULT_VITALS_URL.to_string(),
             watchtower_url: DEFAULT_WATCHTOWER_URL.to_string(),
@@ -69,6 +77,9 @@ impl Config {
         let mut config = Config::dev();
         if let Some(v) = env_nonempty("BIND_ADDR") {
             config.bind_addr = v;
+        }
+        if let Some(v) = env_nonempty("BEACON_PUBLIC_URL") {
+            config.beacon_public_url = v;
         }
         if let Some(v) = env_nonempty("BEACON_URL") {
             config.beacon_url = v;
@@ -183,6 +194,14 @@ mod tests {
         format!(
             r#"{{"schemaVersion":"holdfast.experience-projection.v1","release":"1.0.0","fingerprint":"sha256:{fingerprint}","audience":"{audience}","surfaces":[{{"id":"{id}","name":"{id}","description":"A product surface","url":"{url}","category":"platform","icon":"grid","statusComponent":"Example","profile":"control","capabilities":[],"comingSoon":false}}]}}"#
         )
+    }
+
+    #[test]
+    fn beacon_scope_defaults_are_distinct() {
+        let config = Config::dev();
+        assert_eq!(config.beacon_public_url, "http://beacon:8400");
+        assert_eq!(config.beacon_url, "http://beacon:8401");
+        assert_ne!(config.beacon_public_url, config.beacon_url);
     }
 
     fn temp_dir() -> PathBuf {

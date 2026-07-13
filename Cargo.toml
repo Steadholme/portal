@@ -40,8 +40,8 @@ sha2 = "0.10"
 # TLS client for an https BEACON_URL. rustls with the `ring` backend (NOT aws-lc-rs) avoids
 # the C/cmake toolchain — the same portability choice keystone/keyward/beacon made.
 # `webpki-roots` bundles the Mozilla trust anchors so the runtime image needs no system CA
-# store. The default internal hop is plain http://beacon:8400 (no TLS), but an https override
-# stays supported.
+# store. The default public/operator hops are plain http://beacon:8400 and :8401 (no TLS), but
+# https overrides stay supported.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
 webpki-roots = "0.26"

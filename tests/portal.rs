@@ -63,8 +63,19 @@ fn get_as_groups(uri: &str, email: &str, groups: &str) -> Request<Body> {
 
 /// State whose backend URLs point at the given fakes (dev catalog otherwise).
 fn state_with(beacon: &str, vitals: &str, watchtower: &str) -> AppState {
+    state_with_beacons(beacon, beacon, vitals, watchtower)
+}
+
+/// State with independently selectable public and operator Beacon projections.
+fn state_with_beacons(
+    public_beacon: &str,
+    operator_beacon: &str,
+    vitals: &str,
+    watchtower: &str,
+) -> AppState {
     let mut config = Config::dev();
-    config.beacon_url = beacon.to_string();
+    config.beacon_public_url = public_beacon.to_string();
+    config.beacon_url = operator_beacon.to_string();
     config.vitals_url = vitals.to_string();
     config.watchtower_url = watchtower.to_string();
     let mut state = build_dev_state();
@@ -105,6 +116,7 @@ fn manifest_state() -> AppState {
     )
     .unwrap();
     let mut config = Config::dev();
+    config.beacon_public_url = "http://127.0.0.1:1".to_string();
     config.beacon_url = "http://127.0.0.1:1".to_string();
     config.vitals_url = "http://127.0.0.1:1".to_string();
     config.watchtower_url = "http://127.0.0.1:1".to_string();
@@ -169,6 +181,35 @@ async fn fake_service(routes: &'static [(&'static str, &'static str)]) -> String
                     .find(|(p, _)| path.starts_with(p))
                     .map(|(_, b)| *b)
                     .unwrap_or("{}");
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = sock.write_all(resp.as_bytes()).await;
+                let _ = sock.flush().await;
+            });
+        }
+    });
+    format!("http://{addr}")
+}
+
+/// Dynamic-body variant used when a test needs a generated Beacon projection.
+async fn fake_status_service(body: String) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let body = Arc::new(body);
+    tokio::spawn(async move {
+        loop {
+            let (mut sock, _) = match listener.accept().await {
+                Ok(pair) => pair,
+                Err(_) => break,
+            };
+            let body = Arc::clone(&body);
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = sock.read(&mut buf).await;
                 let resp = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(),
@@ -527,6 +568,119 @@ async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
         assert!(!html.contains(&format!("sha256:{}", "b".repeat(64))));
         assert!(html.contains(&format!("sha256:{}", "a".repeat(64))));
     }
+}
+
+#[tokio::test]
+async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() {
+    let public_beacon = fake_status_service(
+        serde_json::json!({
+            "overall": "operational",
+            "updated_at": 1,
+            "components": [{
+                "name": "Gateway",
+                "kind": "http",
+                "status": "operational",
+                "uptime_24h": 100.0
+            }],
+            "incidents": []
+        })
+        .to_string(),
+    )
+    .await;
+
+    let mut operator_components = vec![
+        serde_json::json!({
+            "name": "Gateway",
+            "kind": "http",
+            "status": "operational",
+            "uptime_24h": 100.0
+        }),
+        serde_json::json!({
+            "name": "CA",
+            "kind": "tcp",
+            "status": "down",
+            "uptime_24h": 51.0
+        }),
+    ];
+    operator_components.extend((1..=49).map(|index| {
+        serde_json::json!({
+            "name": format!("Internal-{index:02}"),
+            "kind": "http",
+            "status": "operational",
+            "uptime_24h": 100.0
+        })
+    }));
+    let operator_beacon = fake_status_service(
+        serde_json::json!({
+            "overall": "down",
+            "updated_at": 1,
+            "components": operator_components,
+            "incidents": []
+        })
+        .to_string(),
+    )
+    .await;
+
+    let mut state = state_with_beacons(
+        &public_beacon,
+        &operator_beacon,
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+    );
+    Arc::make_mut(&mut state.config).zone_verifier = GatewayZoneVerifier::new("test-key");
+
+    let external = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Auth-Email", "alice@holdfast.local")
+        .body(Body::empty())
+        .unwrap();
+    let (status, external_html) = call(&state, external).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(external_html.contains("1 of 1 systems operational"));
+    assert!(external_html.contains(r#"1<span class="metric__unit">/1</span>"#));
+    assert!(!external_html.contains("reporting issues: CA"));
+    assert!(!external_html.contains("of 51 systems"));
+    assert!(!external_html.contains(r#"/51</span>"#));
+    assert!(!external_html.contains("Internal-"));
+
+    let external_wire = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap();
+    let (status, external_fragment) = call(&state, external_wire).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(external_fragment.contains("1 of 1 systems operational"));
+    assert!(!external_fragment.contains("reporting issues: CA"));
+    assert!(!external_fragment.contains("of 51 systems"));
+    assert!(!external_fragment.contains(r#"/51</span>"#));
+    assert!(!external_fragment.contains("Internal-"));
+
+    let signature = zone_signature("test-key", "w33d.xyz", "internal", current_minute());
+    let internal = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Auth-Email", "alice@holdfast.local")
+        .header(HEADER_GATEWAY_ZONE, "internal")
+        .header(HEADER_GATEWAY_ZONE_SIG, signature)
+        .body(Body::empty())
+        .unwrap();
+    let (status, internal_html) = call(&state, internal).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(internal_html.contains("50 of 51 systems operational"));
+    assert!(internal_html.contains("reporting issues: CA"));
+    assert!(internal_html.contains(r#"50<span class="metric__unit">/51</span>"#));
+
+    let (status, ops_html) = call(
+        &state,
+        get_as_groups("/ops", "root@holdfast.local", "infra-admins"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(ops_html.contains(r#"class="au-src" title="Down">CA</td>"#));
+    assert!(ops_html.contains("Internal-49"));
 }
 
 #[tokio::test]

@@ -30,18 +30,24 @@ Portal 是 HOLDFAST 主权基础设施的**顶级入口（apex command center / 
 
 ## 实时数据（并发拉取 + 缓存）
 
-一次页面加载所需的全部实时数据，由 `snapshot` 模块**一轮并发**（`tokio::join!`）拉取，**整体缓存数秒**（默认 5s）。
-每路请求**短超时（2s）**且**各自独立容错**：
+一次页面加载所需的全部实时数据，由 `snapshot` 模块以固定 5 路、**有界并发**（`tokio::join!`）拉取，
+**整体缓存数秒**（默认 5s）。每路请求**短超时（2s）**且**各自独立容错**：
 
 | 后端 | 内网端点 | 用途 |
 |------|----------|------|
-| Beacon | `GET <BEACON_URL>/api/status` | `components[].name/status` → systems-online 计数 + 每张磁贴药丸 |
+| Beacon public projection | `GET <BEACON_PUBLIC_URL>/api/status` | external full/Wire 的 systems-online、incident banner 与 public 磁贴状态 |
+| Beacon operator projection | `GET <BEACON_URL>/api/status` | 签名 internal Estate 与 admin `/ops` 的完整组件状态 |
 | Vitals | `GET <VITALS_URL>/api/metrics?since=…` | 取各 metric 最新样本：`cpu_pct` / `mem_pct` / `load1` → 指标卡 |
 | Watchtower | `GET <WATCHTOWER_URL>/api/verify` | `{ok,count}` → 审计事件数 + 链验证指示 |
 | Watchtower | `GET <WATCHTOWER_URL>/api/events` | 最新审计事件数组（newest-first）→ 最近活动（取前 8） |
 
 > Beacon 返回 `StatusView`；Vitals 返回 `{samples:[{host,metric,value,ts}]}`（`ts` 为 epoch 秒）；
 > Watchtower 事件 `ts` 为 epoch **毫秒**（渲染相对时间时折算为秒）。
+
+两份 Beacon projection 同时进入同一个短期 snapshot，但渲染边界严格按 trust scope 选择：external full 与
+`X-Wire: 1` 只读取 public projection；只有通过 gateway-zone 签名验证的 internal Estate 和 admin `/ops`
+才读取 operator projection。external HTML 不会从共享 cache 的 operator rollup、组件名、总数或 incident banner
+中取值。
 
 **韧性是契约**：任何后端不可达 / 超时 / 非 200 / JSON 损坏，只会把**自己那张卡 / 药丸 / 信息流**降级为
 `—` / `unknown` / 空，**绝不报错或阻塞整页**，其余卡片照常并发渲染。
@@ -89,7 +95,8 @@ category vocabulary 固定为 `communication`、`content`、`identity`、`observ
 | 变量             | 默认                      | 说明 |
 |------------------|---------------------------|------|
 | `BIND_ADDR`      | `0.0.0.0:8600`            | 监听地址 |
-| `BEACON_URL`     | `http://beacon:8400`      | 内网 Beacon 基址（拼 `/api/status`） |
+| `BEACON_PUBLIC_URL` | `http://beacon:8400`   | Beacon public projection 基址（拼 `/api/status`）；只用于 external full/Wire |
+| `BEACON_URL`     | `http://beacon:8401`      | Beacon operator projection 基址（拼 `/api/status`）；只用于 internal Estate 与 `/ops` |
 | `VITALS_URL`     | `http://vitals:8300`      | 内网 Vitals 基址（拼 `/api/metrics`） |
 | `WATCHTOWER_URL` | `http://watchtower:8500`  | 内网 Watchtower 基址（拼 `/api/verify`、`/api/events`） |
 | `EXPERIENCE_PUBLIC_PROJECTION` | 未设置 | production `public` projection 文件路径 |

@@ -40,10 +40,11 @@ RUN useradd --system --uid 10001 --user-group --no-create-home portal
 COPY --from=builder /build/target/release/portal /usr/local/bin/portal
 
 USER portal
-# Default in-container bind + internal backend URLs; overridable at runtime. The dashboard
-# fetches all three concurrently (resilient: any unreachable backend degrades to "—"/unknown).
+# Default in-container bind + backend URLs; overridable at runtime. The dashboard fetches both
+# Beacon projections plus Vitals/Watchtower concurrently; each failure degrades independently.
 ENV BIND_ADDR=0.0.0.0:8600
-ENV BEACON_URL=http://beacon:8400
+ENV BEACON_PUBLIC_URL=http://beacon:8400
+ENV BEACON_URL=http://beacon:8401
 ENV VITALS_URL=http://vitals:8300
 ENV WATCHTOWER_URL=http://watchtower:8500
 EXPOSE 8600

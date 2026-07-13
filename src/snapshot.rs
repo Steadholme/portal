@@ -1,11 +1,11 @@
 //! The dashboard's live data snapshot: one concurrent fetch of every backend, cached a few
 //! seconds.
 //!
-//! A page load needs Beacon (component statuses + systems-online count), Vitals (host
-//! gauges), and Watchtower (audit count + recent activity). All four requests fan out
-//! CONCURRENTLY via `tokio::join!`, each independently resilient: a down backend leaves its
-//! slice at its default ("unknown"/"—"/empty) and never blocks the others. The whole result
-//! is cached for [`CACHE_TTL`], so back-to-back loads share one in-flight refresh.
+//! A page load needs both Beacon projections (public and operator), Vitals (host gauges), and
+//! Watchtower (audit count + recent activity). All five requests fan out CONCURRENTLY via
+//! `tokio::join!`, each independently resilient: a down backend leaves its slice at its default
+//! ("unknown"/"—"/empty) and never blocks the others. The whole result is cached for
+//! [`CACHE_TTL`], so back-to-back loads share one refresh.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -19,8 +19,11 @@ pub const CACHE_TTL: Duration = Duration::from_secs(5);
 /// An aggregated, render-ready view of every backend. Cheap to share behind `Arc`.
 #[derive(Debug, Default)]
 pub struct Snapshot {
-    /// Beacon: per-component statuses + the operational rollup.
-    pub statuses: beacon::Statuses,
+    /// Beacon public projection: the only component statuses external dashboard responses may
+    /// render.
+    pub public_statuses: beacon::Statuses,
+    /// Beacon operator projection: the full component snapshot for attested Estate and `/ops`.
+    pub operator_statuses: beacon::Statuses,
     /// Vitals: latest host gauges (CPU %, memory %, load).
     pub metrics: vitals::Metrics,
     /// Watchtower: audit-chain length + integrity flag.
@@ -33,14 +36,16 @@ impl Snapshot {
     /// Fan out one concurrent fetch of every backend and assemble the snapshot. Always
     /// succeeds: unreachable backends contribute their default (empty) slice.
     pub async fn fetch(config: &Config) -> Snapshot {
-        let (statuses, metrics, verify, events) = tokio::join!(
+        let (public_statuses, operator_statuses, metrics, verify, events) = tokio::join!(
+            beacon::fetch(&config.beacon_public_url),
             beacon::fetch(&config.beacon_url),
             vitals::fetch(&config.vitals_url),
             watchtower::fetch_verify(&config.watchtower_url),
             watchtower::fetch_events(&config.watchtower_url),
         );
         Snapshot {
-            statuses,
+            public_statuses,
+            operator_statuses,
             metrics,
             verify,
             events,

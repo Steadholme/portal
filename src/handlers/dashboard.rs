@@ -20,6 +20,7 @@ use odyssey::{RuntimeOpts, WireOpts, WireSwap};
 use serde::Deserialize;
 
 use crate::auth;
+use crate::beacon::Statuses;
 use crate::catalog::CatalogEntry;
 use crate::handlers::{
     app_css, esc, fmt_pct, greeting, icon_for, name_from_email, pct_width, rel_time,
@@ -70,6 +71,11 @@ pub async fn dashboard(
     let internal_zone = state.config.zone_verifier.is_internal(&headers);
     let wire_fragment = wire_request(&headers);
     let snap = state.cache.get(&state.config).await;
+    let statuses = if internal_zone {
+        &snap.operator_statuses
+    } else {
+        &snap.public_statuses
+    };
     let clock = clock();
     let internal_catalog = internal_zone.then(|| state.config.internal_catalog.as_slice());
     let body = render(
@@ -83,6 +89,7 @@ pub async fn dashboard(
         },
         &email,
         &snap,
+        statuses,
         clock,
         query.q.trim(),
         wire_fragment,
@@ -123,6 +130,7 @@ fn render(
     view: CatalogView<'_>,
     email: &str,
     snap: &Snapshot,
+    statuses: &Statuses,
     clock: (i64, u32),
     search_query: &str,
     wire_fragment: bool,
@@ -162,10 +170,11 @@ fn render(
         filtered_mgmt.as_deref()
     };
     let sidebar_nav = render_sidebar_nav(catalog, mgmt);
-    let sections = render_dashboard_sections(catalog, mgmt, snap, q);
+    let sections = render_dashboard_sections(catalog, mgmt, statuses, q);
     let estate_live = render_estate_live(
         &name,
         snap,
+        statuses,
         now_secs,
         hour,
         EstateSummary {
@@ -185,7 +194,7 @@ fn render(
         .replace("{{INITIAL}}", &esc(&initial))
         .replace("{{NAME}}", &esc(&name))
         .replace("{{EMAIL}}", &esc(email))
-        .replace("{{HEALTH_CHIP}}", &health_chip(snap))
+        .replace("{{HEALTH_CHIP}}", &health_chip(statuses))
         .replace("{{SIDEBAR_NAV}}", &sidebar_nav)
         .replace("{{ESTATE_LIVE}}", &estate_live)
         .replace("{{SECTIONS}}", &sections)
@@ -223,8 +232,7 @@ fn render_sidebar_nav(catalog: &[CatalogEntry], mgmt: Option<&[CatalogEntry]>) -
 
 /// The app-bar health chip: "N/M operational" tinted by whether everything is up. Degrades to
 /// a neutral "status syncing" label until Beacon first reports.
-fn health_chip(snap: &Snapshot) -> String {
-    let s = &snap.statuses;
+fn health_chip(s: &Statuses) -> String {
     if s.reached && s.total > 0 {
         let cls = if s.up == s.total { "is-ok" } else { "is-warn" };
         format!(
@@ -238,8 +246,7 @@ fn health_chip(snap: &Snapshot) -> String {
     }
 }
 
-fn incident_banner(snap: &Snapshot) -> String {
-    let s = &snap.statuses;
+fn incident_banner(s: &Statuses) -> String {
     if !s.reached || s.total == 0 || s.up >= s.total {
         return String::new();
     }
@@ -279,12 +286,12 @@ fn incident_banner(snap: &Snapshot) -> String {
 }
 
 /// One-line live summary under the greeting.
-fn hero_sub(snap: &Snapshot) -> String {
+fn hero_sub(snap: &Snapshot, statuses: &Statuses) -> String {
     let mut parts: Vec<String> = Vec::new();
-    if snap.statuses.reached && snap.statuses.total > 0 {
+    if statuses.reached && statuses.total > 0 {
         parts.push(format!(
             "{} of {} systems operational",
-            snap.statuses.up, snap.statuses.total
+            statuses.up, statuses.total
         ));
     }
     if snap.verify.reached {
@@ -303,6 +310,7 @@ fn hero_sub(snap: &Snapshot) -> String {
 fn render_estate_live(
     name: &str,
     snap: &Snapshot,
+    statuses: &Statuses,
     now_secs: i64,
     hour: u32,
     summary: EstateSummary<'_>,
@@ -362,19 +370,19 @@ fn render_estate_live(
   </section>
 </div>
 </section>"#,
-        incident = incident_banner(snap),
+        incident = incident_banner(statuses),
         greeting = greeting(hour),
         name = esc(name),
-        sub = hero_sub(snap),
+        sub = hero_sub(snap, statuses),
         manifest = render_manifest_signal(
             public_projection,
             estate_projection,
             public_surface_count + internal_surface_count.unwrap_or(0),
         ),
-        signal = fleet_signal(snap),
+        signal = fleet_signal(statuses),
         refresh = refresh,
         planes = render_access_planes(public_surface_count, internal_surface_count),
-        metrics = render_metrics(snap),
+        metrics = render_metrics(snap, statuses),
         activity = render_activity(&snap.events, now_secs, internal_surface_count.is_some(),),
     )
 }
@@ -409,8 +417,7 @@ fn render_projection_identity(audience: &str, identity: &ProjectionIdentity) -> 
     )
 }
 
-fn fleet_signal(snap: &Snapshot) -> String {
-    let statuses = &snap.statuses;
+fn fleet_signal(statuses: &Statuses) -> String {
     if statuses.reached && statuses.total > 0 {
         let class = if statuses.up == statuses.total {
             "estate-signal--ok"
@@ -480,8 +487,7 @@ fn render_access_planes(
 // --- Metric cards ----------------------------------------------------------------------
 
 /// Render the row of live metric cards.
-fn render_metrics(snap: &Snapshot) -> String {
-    let s = &snap.statuses;
+fn render_metrics(snap: &Snapshot, s: &Statuses) -> String {
     let systems_value = if s.reached && s.total > 0 {
         format!("{}<span class=\"metric__unit\">/{}</span>", s.up, s.total)
     } else {
@@ -704,10 +710,10 @@ fn filter_catalog(catalog: &[CatalogEntry], q: &str) -> Vec<CatalogEntry> {
 }
 
 /// Render the app chiclets grouped into the fixed sections (Okta end-user dashboard layout).
-fn render_sections(catalog: &[CatalogEntry], snap: &Snapshot) -> String {
+fn render_sections(catalog: &[CatalogEntry], statuses: &Statuses) -> String {
     let mut out = String::new();
     for (key, label, apps) in grouped_catalog(catalog) {
-        out.push_str(&render_app_section(key, key, label, &apps, snap));
+        out.push_str(&render_app_section(key, key, label, &apps, statuses));
     }
     out
 }
@@ -715,7 +721,7 @@ fn render_sections(catalog: &[CatalogEntry], snap: &Snapshot) -> String {
 fn render_dashboard_sections(
     catalog: &[CatalogEntry],
     mgmt: Option<&[CatalogEntry]>,
-    snap: &Snapshot,
+    statuses: &Statuses,
     search_query: &str,
 ) -> String {
     let mgmt_empty = mgmt.is_none_or(|entries| entries.is_empty());
@@ -728,7 +734,7 @@ fn render_dashboard_sections(
             esc(search_query)
         );
     }
-    let mut out = render_sections(catalog, snap);
+    let mut out = render_sections(catalog, statuses);
     if let Some(mgmt) = mgmt {
         if !mgmt.is_empty() {
             let apps: Vec<&CatalogEntry> = mgmt.iter().collect();
@@ -737,7 +743,7 @@ fn render_dashboard_sections(
                 MGMT_SECTION_STYLE,
                 MGMT_SECTION_LABEL,
                 &apps,
-                snap,
+                statuses,
             ));
         }
     }
@@ -749,7 +755,7 @@ fn render_app_section(
     style_key: &str,
     label: &str,
     apps: &[&CatalogEntry],
-    snap: &Snapshot,
+    statuses: &Statuses,
 ) -> String {
     let mut out = format!(
         r#"<section class="appsec appsec--{style}" id="{id}" data-section><h2 class="appsec__title"><span class="pip"></span><span class="nm">{label}</span><span class="ct">{count} apps</span><span class="ln"></span></h2><div class="appgrid">"#,
@@ -759,7 +765,7 @@ fn render_app_section(
         count = apps.len(),
     );
     for entry in apps {
-        out.push_str(&render_app(entry, snap));
+        out.push_str(&render_app(entry, statuses));
     }
     out.push_str("</div></section>");
     out
@@ -767,7 +773,7 @@ fn render_app_section(
 
 /// One app chiclet: a category-tinted icon tile, the app name + description, and a live status
 /// dot (top-right). Coming-soon services show a "Soon" badge and an accent dot.
-fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
+fn render_app(entry: &CatalogEntry, statuses: &Statuses) -> String {
     let cat = category_key(entry);
     let soon_badge = if entry.coming_soon {
         r#"<span class="app__soon">Soon</span>"#.to_string()
@@ -777,9 +783,9 @@ fn render_app(entry: &CatalogEntry, snap: &Snapshot) -> String {
     let status_span = if entry.coming_soon {
         String::new()
     } else {
-        match snap.statuses.status_of(&entry.component) {
+        match statuses.status_of(&entry.component) {
             "degraded" | "down" => {
-                let status = snap.statuses.status_of(&entry.component);
+                let status = statuses.status_of(&entry.component);
                 let title = status_label(status);
                 format!(
                     r#"<span class="app__status {dot}" title="{title}" aria-label="{title}"></span>"#,
@@ -911,6 +917,7 @@ mod tests {
             },
             "alice@holdfast.local",
             &snapshot,
+            &snapshot.public_statuses,
             (1_700_000_000, 8),
             "",
             false,
@@ -924,6 +931,7 @@ mod tests {
             },
             "alice@holdfast.local",
             &snapshot,
+            &snapshot.public_statuses,
             (1_700_000_000, 8),
             "",
             true,

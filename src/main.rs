@@ -31,6 +31,7 @@ async fn main() {
         .parse()
         .expect("invalid bind_addr in config");
 
+    let beacon_public_url = state.config.beacon_public_url.clone();
     let beacon_url = state.config.beacon_url.clone();
     let app = portal::app(state);
 
@@ -38,7 +39,12 @@ async fn main() {
         .await
         .unwrap_or_else(|e| panic!("failed to bind {addr}: {e}"));
 
-    tracing::info!(%addr, %beacon_url, "Portal listening (HOLDFAST apex launcher/dashboard)");
+    tracing::info!(
+        %addr,
+        %beacon_public_url,
+        %beacon_url,
+        "Portal listening (HOLDFAST apex launcher/dashboard)"
+    );
     axum::serve(listener, app).await.expect("server error");
 }
 

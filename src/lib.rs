@@ -32,7 +32,8 @@ use crate::snapshot::{SnapshotCache, CACHE_TTL};
 
 /// Shared application state. Cheap to clone (everything behind `Arc`). Portal holds no
 /// persistent store — only the immutable [`Config`] and the few-second live-data snapshot
-/// cache (Beacon statuses + Vitals gauges + Watchtower audit summary, fetched concurrently).
+/// cache (public/operator Beacon statuses + Vitals gauges + Watchtower audit summary, fetched
+/// concurrently).
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
@@ -69,9 +70,9 @@ async fn require_gateway_sig(
     }
 }
 
-/// Construct dev state: dev [`Config`] (default catalog + default Beacon URL) and a fresh
-/// status cache. Used by `main`'s default path and by the integration tests, so they need
-/// neither configuration nor a database.
+/// Construct dev state: dev [`Config`] (default catalogs + separate Beacon projection URLs) and
+/// a fresh status cache. Used by `main`'s default path and by the integration tests, so they
+/// need neither configuration nor a database.
 pub fn build_dev_state() -> AppState {
     AppState {
         config: Arc::new(Config::dev()),
