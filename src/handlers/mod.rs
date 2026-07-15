@@ -210,7 +210,7 @@ pub fn greeting(hour: u32) -> &'static str {
 }
 
 /// Friendly display name from a signed-in email: the local-part, first letter capitalized
-/// (`alice@holdfast.local` -> `Alice`). Falls back to the whole string when there's no `@`,
+/// (`alice@steadholme.local` -> `Alice`). Falls back to the whole string when there's no `@`,
 /// and to `Operator` when blank.
 pub fn name_from_email(email: &str) -> String {
     let local = email.split('@').next().unwrap_or(email).trim();
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn name_from_email_uses_capitalized_local_part() {
-        assert_eq!(name_from_email("alice@holdfast.local"), "Alice");
+        assert_eq!(name_from_email("alice@steadholme.local"), "Alice");
         assert_eq!(name_from_email("operator"), "Operator");
         assert_eq!(name_from_email(""), "Operator");
         assert_eq!(name_from_email("  "), "Operator");

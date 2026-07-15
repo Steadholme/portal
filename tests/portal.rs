@@ -263,13 +263,13 @@ async fn dashboard_renders_full_command_center() {
         ("/api/verify", r#"{"ok":true,"count":3,"head_hash":"abc"}"#),
         (
             "/api/events",
-            r#"[{"seq":3,"ts":1700000000000,"actor":"alice@holdfast.local","action":"login","target":"keystone","severity":"info","detail":"d","source":"gw","prev_hash":"p","hash":"h"}]"#,
+            r#"[{"seq":3,"ts":1700000000000,"actor":"alice@steadholme.local","action":"login","target":"keystone","severity":"info","detail":"d","source":"gw","prev_hash":"p","hash":"h"}]"#,
         ),
     ])
     .await;
 
     let state = state_with(&beacon, &vitals, &watchtower);
-    let (status, html) = call(&state, get_as("/", "alice@holdfast.local")).await;
+    let (status, html) = call(&state, get_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
 
     // Greeting uses the email local-part (capitalized), rendered inside the gradient name span;
@@ -279,7 +279,7 @@ async fn dashboard_renders_full_command_center() {
         "greeting names the signed-in user"
     );
     assert!(
-        html.contains("alice@holdfast.local"),
+        html.contains("alice@steadholme.local"),
         "signed-in email rendered"
     );
 
@@ -432,7 +432,7 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
         "http://127.0.0.1:1",
         "http://127.0.0.1:1",
     );
-    let (status, html) = call(&state, get_as("/", "alice@holdfast.local")).await;
+    let (status, html) = call(&state, get_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
 
     assert!(html.contains(r#"<html lang="en" data-ody-profile="portal">"#));
@@ -486,7 +486,7 @@ async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
     let external = Request::builder()
         .uri("/")
         .header("Host", "w33d.xyz")
-        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Auth-Email", "alice@steadholme.local")
         .body(Body::empty())
         .unwrap();
     let (status, public_html) = call(&state, external).await;
@@ -514,7 +514,7 @@ async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
     let internal = Request::builder()
         .uri("/")
         .header("Host", "w33d.xyz")
-        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Auth-Email", "alice@steadholme.local")
         .header(HEADER_GATEWAY_ZONE, "internal")
         .header(HEADER_GATEWAY_ZONE_SIG, valid_sig.clone())
         .body(Body::empty())
@@ -632,7 +632,7 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
     let external = Request::builder()
         .uri("/")
         .header("Host", "w33d.xyz")
-        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Auth-Email", "alice@steadholme.local")
         .body(Body::empty())
         .unwrap();
     let (status, external_html) = call(&state, external).await;
@@ -662,7 +662,7 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
     let internal = Request::builder()
         .uri("/")
         .header("Host", "w33d.xyz")
-        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Auth-Email", "alice@steadholme.local")
         .header(HEADER_GATEWAY_ZONE, "internal")
         .header(HEADER_GATEWAY_ZONE_SIG, signature)
         .body(Body::empty())
@@ -675,7 +675,7 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
 
     let (status, ops_html) = call(
         &state,
-        get_as_groups("/ops", "root@holdfast.local", "infra-admins"),
+        get_as_groups("/ops", "root@steadholme.local", "infra-admins"),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -692,7 +692,7 @@ async fn dashboard_wire_response_is_exact_read_only_live_region() {
     );
     let request = Request::builder()
         .uri("/")
-        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Auth-Email", "alice@steadholme.local")
         .header("X-Wire", "1")
         .body(Body::empty())
         .unwrap();
@@ -760,7 +760,7 @@ async fn dashboard_external_wire_fragment_hides_audit_event_targets() {
 
     let external = Request::builder()
         .uri("/")
-        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Auth-Email", "alice@steadholme.local")
         .header("X-Wire", "1")
         .body(Body::empty())
         .unwrap();
@@ -775,7 +775,7 @@ async fn dashboard_external_wire_fragment_hides_audit_event_targets() {
 
     let internal = Request::builder()
         .uri("/")
-        .header("X-Auth-Email", "alice@holdfast.local")
+        .header("X-Auth-Email", "alice@steadholme.local")
         .header("X-Gateway-Zone", "internal")
         .header("X-Wire", "1")
         .body(Body::empty())
@@ -830,7 +830,7 @@ async fn dashboard_incident_banner_uses_down_variant() {
     .await;
     let state = state_with(&beacon, "http://127.0.0.1:1", "http://127.0.0.1:1");
 
-    let (status, html) = call(&state, get_as("/", "alice@holdfast.local")).await;
+    let (status, html) = call(&state, get_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
         html.contains(r#"class="incidentbar incidentbar--down""#),
@@ -854,7 +854,7 @@ async fn dashboard_search_query_filters_server_side() {
         "http://127.0.0.1:1",
     );
 
-    let (status, html) = call(&state, get_as("/?q=webmail", "alice@holdfast.local")).await;
+    let (status, html) = call(&state, get_as("/?q=webmail", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
         html.contains(r#"value="webmail""#),
@@ -873,7 +873,7 @@ async fn dashboard_search_query_filters_server_side() {
         "single search result still follows merged section rules"
     );
 
-    let (status, html) = call(&state, get_as("/?q=no-such-app", "alice@holdfast.local")).await;
+    let (status, html) = call(&state, get_as("/?q=no-such-app", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
         html.contains("No apps match &ldquo;no-such-app&rdquo;."),
@@ -893,7 +893,7 @@ async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
     .await;
     let state = state_with(&beacon, "http://127.0.0.1:1", "http://127.0.0.1:1");
 
-    let (status, html) = call(&state, get_as_zone("/", "alice@holdfast.local", "internal")).await;
+    let (status, html) = call(&state, get_as_zone("/", "alice@steadholme.local", "internal")).await;
     assert_eq!(status, StatusCode::OK);
 
     assert!(
@@ -958,11 +958,11 @@ async fn dashboard_public_gateway_zone_is_byte_identical_without_mgmt() {
         "http://127.0.0.1:1",
     );
 
-    let (missing_status, missing) = call(&state, get_as("/", "eve@holdfast.local")).await;
+    let (missing_status, missing) = call(&state, get_as("/", "eve@steadholme.local")).await;
     let (external_status, external) =
-        call(&state, get_as_zone("/", "eve@holdfast.local", "external")).await;
+        call(&state, get_as_zone("/", "eve@steadholme.local", "external")).await;
     let (wrong_case_status, wrong_case) =
-        call(&state, get_as_zone("/", "eve@holdfast.local", "Internal")).await;
+        call(&state, get_as_zone("/", "eve@steadholme.local", "Internal")).await;
 
     assert_eq!(missing_status, StatusCode::OK);
     assert_eq!(external_status, StatusCode::OK);
@@ -1005,13 +1005,13 @@ async fn dashboard_is_resilient_when_all_backends_down() {
         "http://127.0.0.1:1",
     );
 
-    let (status, html) = call(&state, get_as("/", "bob@holdfast.local")).await;
+    let (status, html) = call(&state, get_as("/", "bob@steadholme.local")).await;
     assert_eq!(
         status,
         StatusCode::OK,
         "page renders even when every backend is down"
     );
-    assert!(html.contains("bob@holdfast.local"), "email still rendered");
+    assert!(html.contains("bob@steadholme.local"), "email still rendered");
 
     // Unknown tile status stays silent while placeholders continue to degrade gracefully.
     assert!(
@@ -1060,13 +1060,13 @@ async fn ops_console_forbidden_for_non_admin() {
     );
 
     // No groups at all.
-    let (status, _) = call(&state, get_as("/ops", "eve@holdfast.local")).await;
+    let (status, _) = call(&state, get_as("/ops", "eve@steadholme.local")).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "no groups -> 403 on /ops");
 
     // A non-admin group.
     let (status, _) = call(
         &state,
-        get_as_groups("/ops", "eve@holdfast.local", "readers,writers"),
+        get_as_groups("/ops", "eve@steadholme.local", "readers,writers"),
     )
     .await;
     assert_eq!(
@@ -1076,7 +1076,7 @@ async fn ops_console_forbidden_for_non_admin() {
     );
 
     // The public dashboard stays open to the same non-admin user.
-    let (dash, _) = call(&state, get_as("/", "eve@holdfast.local")).await;
+    let (dash, _) = call(&state, get_as("/", "eve@steadholme.local")).await;
     assert_eq!(
         dash,
         StatusCode::OK,
@@ -1108,8 +1108,8 @@ async fn ops_console_renders_for_admin() {
         (
             "/api/events",
             r#"[
-              {"seq":7,"ts":1700000000000,"source":"keystone","actor":"alice@holdfast.local","action":"login","target":"sso","severity":"info"},
-              {"seq":6,"ts":1699999000000,"source":"relay","actor":"bob@holdfast.local","action":"key.revoke","target":"relay_sk_x","severity":"warning"}
+              {"seq":7,"ts":1700000000000,"source":"keystone","actor":"alice@steadholme.local","action":"login","target":"sso","severity":"info"},
+              {"seq":6,"ts":1699999000000,"source":"relay","actor":"bob@steadholme.local","action":"key.revoke","target":"relay_sk_x","severity":"warning"}
             ]"#,
         ),
     ])
@@ -1118,7 +1118,7 @@ async fn ops_console_renders_for_admin() {
     let state = state_with(&beacon, &vitals, &watchtower);
     let (status, html) = call(
         &state,
-        get_as_groups("/ops", "root@holdfast.local", "infra-admins"),
+        get_as_groups("/ops", "root@steadholme.local", "infra-admins"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "admin group unlocks /ops");
@@ -1170,7 +1170,7 @@ async fn ops_console_resilient_when_backends_down() {
     );
     let (status, html) = call(
         &state,
-        get_as_groups("/ops", "root@holdfast.local", "admins"),
+        get_as_groups("/ops", "root@steadholme.local", "admins"),
     )
     .await;
     assert_eq!(
@@ -1196,9 +1196,9 @@ async fn watchtower_with_three_events() -> String {
         (
             "/api/events",
             r#"[
-              {"seq":3,"ts":1700000200000,"source":"keystone","actor":"alice@holdfast.local","action":"login","target":"sso","severity":"info","detail":"ok","prev_hash":"p3","hash":"h3"},
-              {"seq":2,"ts":1700000100000,"source":"relay","actor":"bob@holdfast.local","action":"key.revoke","target":"relay_sk","severity":"warning","detail":"<script>alert(1)</script>","prev_hash":"p2","hash":"h2"},
-              {"seq":1,"ts":1700000000000,"source":"keystone","actor":"carol@holdfast.local","action":"logout","target":"sso","severity":"info","detail":"","prev_hash":"p1","hash":"h1"}
+              {"seq":3,"ts":1700000200000,"source":"keystone","actor":"alice@steadholme.local","action":"login","target":"sso","severity":"info","detail":"ok","prev_hash":"p3","hash":"h3"},
+              {"seq":2,"ts":1700000100000,"source":"relay","actor":"bob@steadholme.local","action":"key.revoke","target":"relay_sk","severity":"warning","detail":"<script>alert(1)</script>","prev_hash":"p2","hash":"h2"},
+              {"seq":1,"ts":1700000000000,"source":"keystone","actor":"carol@steadholme.local","action":"logout","target":"sso","severity":"info","detail":"","prev_hash":"p1","hash":"h1"}
             ]"#,
         ),
     ])
@@ -1222,7 +1222,7 @@ async fn ops_gate_holds_with_audit_query_params() {
         &state,
         get_as_groups(
             "/ops?actor=alice&range=7d&page=2",
-            "eve@holdfast.local",
+            "eve@steadholme.local",
             "readers",
         ),
     )
@@ -1233,7 +1233,7 @@ async fn ops_gate_holds_with_audit_query_params() {
         "non-admin stays 403 with query params"
     );
 
-    let (status, _) = call(&state, get_as("/ops?actor=alice", "eve@holdfast.local")).await;
+    let (status, _) = call(&state, get_as("/ops?actor=alice", "eve@steadholme.local")).await;
     assert_eq!(
         status,
         StatusCode::FORBIDDEN,
@@ -1242,7 +1242,7 @@ async fn ops_gate_holds_with_audit_query_params() {
 
     let (status, _) = call(
         &state,
-        get_as_groups("/ops?actor=alice&page=99", "root@holdfast.local", "admins"),
+        get_as_groups("/ops?actor=alice&page=99", "root@steadholme.local", "admins"),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "admin passes with any query params");
@@ -1258,7 +1258,7 @@ async fn ops_audit_filters_apply_server_side() {
         &state,
         get_as_groups(
             "/ops?actor=alice&source=key",
-            "root@holdfast.local",
+            "root@steadholme.local",
             "admins",
         ),
     )
@@ -1266,11 +1266,11 @@ async fn ops_audit_filters_apply_server_side() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(audit_row_count(&html), 1, "one matching row rendered");
     assert!(
-        html.contains("alice@holdfast.local"),
+        html.contains("alice@steadholme.local"),
         "matching actor rendered"
     );
     assert!(
-        !html.contains("bob@holdfast.local"),
+        !html.contains("bob@steadholme.local"),
         "non-matching actor filtered out"
     );
     assert!(
@@ -1285,20 +1285,20 @@ async fn ops_audit_filters_apply_server_side() {
     // Action substring filter.
     let (_, html) = call(
         &state,
-        get_as_groups("/ops?action=revoke", "root@holdfast.local", "admins"),
+        get_as_groups("/ops?action=revoke", "root@steadholme.local", "admins"),
     )
     .await;
     assert_eq!(audit_row_count(&html), 1);
     assert!(html.contains("key.revoke"), "matching action rendered");
     assert!(
-        !html.contains("carol@holdfast.local"),
+        !html.contains("carol@steadholme.local"),
         "non-matching event filtered out"
     );
 
     // A filter value with HTML is echoed ESCAPED, never raw, and matches nothing.
     let (_, html) = call(
         &state,
-        get_as_groups("/ops?actor=%3Cscript%3E", "root@holdfast.local", "admins"),
+        get_as_groups("/ops?actor=%3Cscript%3E", "root@steadholme.local", "admins"),
     )
     .await;
     assert!(
@@ -1327,7 +1327,7 @@ async fn ops_audit_time_range_filters() {
         &state,
         get_as_groups(
             "/ops?range=custom&from=1700000000&to=1700000050",
-            "root@holdfast.local",
+            "root@steadholme.local",
             "admins",
         ),
     )
@@ -1335,11 +1335,11 @@ async fn ops_audit_time_range_filters() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(audit_row_count(&html), 1, "custom range keeps one event");
     assert!(
-        html.contains("carol@holdfast.local"),
+        html.contains("carol@steadholme.local"),
         "the in-range event rendered"
     );
     assert!(
-        !html.contains("alice@holdfast.local"),
+        !html.contains("alice@steadholme.local"),
         "later events excluded"
     );
     assert!(
@@ -1354,7 +1354,7 @@ async fn ops_audit_time_range_filters() {
     // A relative preset (24h): the canned 2023 events are all older -> nothing matches.
     let (_, html) = call(
         &state,
-        get_as_groups("/ops?range=24h", "root@holdfast.local", "admins"),
+        get_as_groups("/ops?range=24h", "root@steadholme.local", "admins"),
     )
     .await;
     assert_eq!(
@@ -1377,7 +1377,7 @@ async fn ops_audit_pagination_preserves_filters() {
             items.push(',');
         }
         items.push_str(&format!(
-            r#"{{"seq":{seq},"ts":{ts},"source":"keystone","actor":"page.user@holdfast.local","action":"act.{i}","target":"t","severity":"info","detail":"d","prev_hash":"p","hash":"h"}}"#,
+            r#"{{"seq":{seq},"ts":{ts},"source":"keystone","actor":"page.user@steadholme.local","action":"act.{i}","target":"t","severity":"info","detail":"d","prev_hash":"p","hash":"h"}}"#,
             seq = 30 - i,
             ts = 1_700_000_000_000i64 - i as i64,
         ));
@@ -1401,7 +1401,7 @@ async fn ops_audit_pagination_preserves_filters() {
 
     let (status, html) = call(
         &state,
-        get_as_groups("/ops?actor=page.user", "root@holdfast.local", "admins"),
+        get_as_groups("/ops?actor=page.user", "root@steadholme.local", "admins"),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -1420,7 +1420,7 @@ async fn ops_audit_pagination_preserves_filters() {
         &state,
         get_as_groups(
             "/ops?actor=page.user&page=2",
-            "root@holdfast.local",
+            "root@steadholme.local",
             "admins",
         ),
     )
@@ -1445,7 +1445,7 @@ async fn ops_audit_pagination_preserves_filters() {
         &state,
         get_as_groups(
             "/ops?actor=page.user&page=99",
-            "root@holdfast.local",
+            "root@steadholme.local",
             "admins",
         ),
     )
@@ -1463,7 +1463,7 @@ async fn ops_event_detail_expands_full_metadata_escaped() {
     let state = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower);
     let (status, html) = call(
         &state,
-        get_as_groups("/ops", "root@holdfast.local", "admins"),
+        get_as_groups("/ops", "root@steadholme.local", "admins"),
     )
     .await;
     assert_eq!(status, StatusCode::OK);

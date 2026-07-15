@@ -561,10 +561,10 @@ mod tests {
     #[test]
     fn parse_query_reads_every_param_and_decodes() {
         let q = parse_query(
-            "source=key%20stone&actor=alice%40holdfast.local&action=key.revoke&range=24h&from=100&to=200&page=3",
+            "source=key%20stone&actor=alice%40steadholme.local&action=key.revoke&range=24h&from=100&to=200&page=3",
         );
         assert_eq!(q.source, "key stone");
-        assert_eq!(q.actor, "alice@holdfast.local");
+        assert_eq!(q.actor, "alice@steadholme.local");
         assert_eq!(q.action, "key.revoke");
         assert_eq!(q.range, "24h");
         assert_eq!(q.from, Some(100));
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn matches_filters_substrings_case_insensitively() {
-        let ev = event(1_000, "Keystone", "alice@holdfast.local", "key.revoke");
+        let ev = event(1_000, "Keystone", "alice@steadholme.local", "key.revoke");
         let q = parse_query("source=keys&actor=ALICE&action=revoke");
         assert!(q.matches(&ev, None, None));
 
