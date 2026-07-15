@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Multi-stage build for Portal (the HOLDFAST apex launcher/dashboard).
+# Multi-stage build for Portal (the Steadholme apex launcher/dashboard).
 #   - builder: rust:1.96-slim (Debian trixie; ships gcc for the `ring` C build).
 #   - runtime: debian:trixie-slim (matching glibc), non-root, ca-certificates.
 #

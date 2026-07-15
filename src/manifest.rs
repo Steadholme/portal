@@ -1,4 +1,4 @@
-//! Strict loader for the audience-specific HOLDFAST Experience projections.
+//! Strict loader for the audience-specific Steadholme Experience projections.
 //!
 //! The canonical Manifest generator emits two disjoint projections: `public` contains only
 //! discoverable product surfaces, while `estate` contains only the additional WireGuard

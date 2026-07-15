@@ -5,7 +5,7 @@
 //! live status pill is derived from. `coming_soon` marks a not-yet-live service (Mail /
 //! Corvid): its tile renders a "Coming soon" tag instead of a live status pill.
 //!
-//! The built-in [`default_catalog`] is the sensible HOLDFAST default; an operator overrides
+//! The built-in [`default_catalog`] is the sensible Steadholme default; an operator overrides
 //! the whole list via the `PORTAL_CATALOG` JSON env var (parsed by [`parse_catalog`]).
 
 use serde::{Deserialize, Serialize};
@@ -46,7 +46,7 @@ pub struct CatalogEntry {
     pub coming_soon: bool,
 }
 
-/// The built-in HOLDFAST **public** apex catalog: only the user-facing app surfaces that are
+/// The built-in Steadholme **public** apex catalog: only the user-facing app surfaces that are
 /// actually reachable through the public gateway. Ops/mgmt surfaces (Vitals, Audit, Vault,
 /// Backup, CI, DNS, …) are deliberately EXCLUDED — post network-zoning they are VPN-only and
 /// return 404 to the public, so they never belong on a public launcher. Each tile maps to a

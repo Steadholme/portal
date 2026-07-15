@@ -1,19 +1,19 @@
-# Portal — HOLDFAST 主权云指挥中心
+# Portal — Steadholme 主权云指挥中心
 
-Portal 是 HOLDFAST 主权基础设施的**顶级入口（apex command center / dashboard）**，部署在 `w33d.xyz`。
+Portal 是 Steadholme 主权基础设施的**顶级入口（apex command center / dashboard）**，部署在 `w33d.xyz`。
 它坐落在 Sluice 网关的 `auth=sso` 路由之后，**自身不做任何登录**：网关完成 OIDC 浏览器登录后，
 **剥离**入站 `X-Auth-*` 并注入可信身份头，Portal 直接读取 `X-Auth-Email` 显示「已登录为」。
 仅内网可达（只能经 Sluice 在 `w33d.xyz` 主机上访问）。
 
 技术栈与 keystone / keyward / beacon 一致：Rust + axum、env 驱动的 `Config`、`healthcheck` 子命令、
-多阶段非 root Dockerfile（rustls + `ring`，不链接 OpenSSL）、内嵌 HOLDFAST 企业级设计令牌
+多阶段非 root Dockerfile（rustls + `ring`，不链接 OpenSSL）、内嵌 Steadholme 企业级设计令牌
 （品牌渐变 `#0B1220→#0F172A`、靛蓝强调色 `#4F46E5`、圆角卡片、状态药丸、盾徽 + 字标应用栏）。
 
 ## 指挥中心仪表盘 `GET /`
 
 现代化的运维指挥中心（server-rendered，CSS 内嵌），自上而下：
 
-- **应用栏（sticky）**：左侧盾徽 + `HOLDFAST` 字标 + `Command Center` 标签；右侧登录邮箱（带首字母头像）+
+- **应用栏（sticky）**：左侧盾徽 + `Steadholme` 字标 + `Command Center` 标签；右侧登录邮箱（带首字母头像）+
   指向 `https://sso.w33d.xyz/_gw/auth/logout` 的退出链接（**绝对地址**，跨子域）。
 - **品牌渐变 Hero**：基于服务器时间的问候语（`Good morning/afternoon/evening, <Name>`，name 取邮箱
   local-part 首字母大写）+ 一行实时摘要（`N of M systems operational · K audit events sealed`）。

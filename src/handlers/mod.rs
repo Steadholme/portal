@@ -28,7 +28,7 @@ pub fn app_css() -> &'static str {
         .as_str()
 }
 
-/// Canonical HOLDFAST mark; its color follows Odyssey's semantic Portal accent.
+/// Canonical Steadholme mark; its color follows Odyssey's semantic Portal accent.
 pub const SHIELD_SVG: &str = odyssey::HOLDFAST_MARK_SVG;
 
 /// Minimal HTML escaping for text/attribute interpolation.

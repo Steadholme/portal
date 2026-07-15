@@ -43,7 +43,7 @@ pub struct Config {
     /// and the activity feed hits `<url>/api/events`.
     pub watchtower_url: String,
     /// Service tiles rendered on the dashboard (`PORTAL_CATALOG` JSON override, else the
-    /// built-in HOLDFAST default).
+    /// built-in Steadholme default).
     pub catalog: Vec<CatalogEntry>,
     /// Additional Estate-only tiles. The dashboard reads this slice only after a valid internal
     /// gateway-zone attestation; external responses never render or serialize it.

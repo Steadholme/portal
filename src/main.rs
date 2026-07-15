@@ -43,7 +43,7 @@ async fn main() {
         %addr,
         %beacon_public_url,
         %beacon_url,
-        "Portal listening (HOLDFAST apex launcher/dashboard)"
+        "Portal listening (Steadholme apex launcher/dashboard)"
     );
     axum::serve(listener, app).await.expect("server error");
 }

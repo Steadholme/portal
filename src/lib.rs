@@ -1,4 +1,4 @@
-//! Portal — the HOLDFAST apex launcher/dashboard for the sovereign-infra stack.
+//! Portal — the Steadholme apex launcher/dashboard for the sovereign-infra stack.
 //!
 //! Portal is the dashboard at `w33d.xyz`, fronted by the Sluice gateway on an `auth=sso`
 //! route. It does NO login of its own: it reads the gateway-injected `X-Auth-Email` and

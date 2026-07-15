@@ -1,4 +1,4 @@
-//! The apex command center: `GET /` renders the HOLDFAST operations dashboard.
+//! The apex command center: `GET /` renders the Steadholme operations dashboard.
 //!
 //! A sticky app-bar (shield + wordmark, signed-in email, logout), a brand-gradient hero with
 //! a time-of-day greeting, a row of LIVE METRIC CARDS (systems online, host CPU/memory, audit
