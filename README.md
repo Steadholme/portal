@@ -113,10 +113,10 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 
 # 构建镜像
-docker build -t holdfast/portal:dev .
+docker build -t steadholme/portal:dev .
 
 # 冒烟：健康检查 + 仪表盘（后端不可达时仍渲染，指标降级为 — / unknown）
-docker run --rm -p 8600:8600 holdfast/portal:dev &
+docker run --rm -p 8600:8600 steadholme/portal:dev &
 curl -fsS http://127.0.0.1:8600/healthz          # -> ok
 curl -fsS http://127.0.0.1:8600/ | head          # -> 渲染指挥中心仪表盘
 ```
