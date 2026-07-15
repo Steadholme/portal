@@ -29,7 +29,7 @@ pub fn app_css() -> &'static str {
 }
 
 /// Canonical Steadholme mark; its color follows Odyssey's semantic Portal accent.
-pub const SHIELD_SVG: &str = odyssey::HOLDFAST_MARK_SVG;
+pub const SHIELD_SVG: &str = odyssey::STEADHOLME_MARK_SVG;
 
 /// Minimal HTML escaping for text/attribute interpolation.
 pub fn esc(s: &str) -> String {
