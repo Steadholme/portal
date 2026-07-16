@@ -8,7 +8,7 @@ pub const APP_CSS: &str = concat!(
 );
 pub const WIRE_JS: &str = include_str!("../js/wire.js");
 pub const SPARK_JS: &str = include_str!("../js/spark.js");
-/// Public Odyssey 1.2 canary enhancer. It is network-free and remains separate from the internal
+/// Public Odyssey 1.3 canary enhancer. It is network-free and remains separate from the internal
 /// Wire/Spark runtime so applications opt into the public shell contract explicitly.
 pub const CANARY_JS: &str = include_str!("../js/canary.js");
 pub const PROFILE_CSS: &str = include_str!("../css/profile.css");
@@ -263,6 +263,33 @@ mod tests {
     }
 
     #[test]
+    fn app_css_contains_narrow_chrome_and_bounded_identity_copy() {
+        assert!(APP_CSS.contains("@media (max-width:360px)"));
+        assert!(APP_CSS.contains(".appbar__name { display:none; }"));
+        assert!(APP_CSS.contains(".usermenu__head > div { min-width:0; }"));
+        assert!(APP_CSS.contains(
+            ".usermenu__head b,.usermenu__head > div > span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }"
+        ));
+    }
+
+    #[test]
+    fn dynamic_runtime_observes_skipped_view_transition_rejections() {
+        for runtime in [WIRE_JS, MOTION_JS] {
+            assert!(runtime.contains("function observeTransition(transition)"));
+            assert!(runtime.contains("transition.ready.catch(function(){})"));
+            assert!(runtime.contains("transition.finished.catch(function(){})"));
+        }
+    }
+
+    #[test]
+    fn dynamic_runtime_propagates_synchronous_fallback_update_errors() {
+        assert!(
+            MOTION_JS.contains("typeof d.startViewTransition !== 'function'){\n      update();")
+        );
+        assert!(!MOTION_JS.contains("try{ update(); }catch(e){}"));
+    }
+
+    #[test]
     fn app_css_contains_view_transition_layer() {
         // The cross-document continuity headline: @view-transition opt-in + the reduced-motion guard
         // that reaches the ::view-transition-* pseudos the global `*{animation:none}` rule cannot.
@@ -299,7 +326,10 @@ mod tests {
         assert!(PROFILE_CSS.contains("data-ody-status=\"operational\""));
         assert!(!PROFILE_CSS.contains(":root:not([data-ody-profile])"));
 
-        assert!(CANARY_JS.contains("1.2.0-canary.1"));
+        assert!(CANARY_JS.contains("1.3.0-canary.1"));
+        assert!(PROFILE_CSS.contains("data-ody-shell=\"1.3\""));
+        assert!(PROFILE_CSS.contains(".ody-band"));
+        assert!(PROFILE_CSS.contains(".ody-wall"));
         assert!(CANARY_JS.contains("data-ody-shell-nav"));
         assert!(CANARY_JS.contains("Odyssey.canary"));
     }

@@ -1,7 +1,7 @@
 // GENERATED FROM odyssey — DO NOT EDIT
 use std::fmt;
 
-/// Cross-product presentation profiles supported by the Odyssey 1.2 root contract.
+/// Cross-product presentation profiles supported by the Odyssey 1.3 root contract.
 ///
 /// A profile coordinates shell framing, navigation, and status language. It does not replace a
 /// product's ordinary semantic theme tokens. Bespoke templates opt in by stamping
@@ -86,7 +86,7 @@ mod tests {
         for name in names {
             assert!(
                 css.contains(&format!("data-ody-profile=\"{name}\"")),
-                "profile {name} must be represented by the 1.2 CSS contract"
+                "profile {name} must be represented by the 1.3 CSS contract"
             );
         }
     }

@@ -87,6 +87,17 @@ html[lang^="ja"] body,html[lang^="zh"] body{ letter-spacing:normal; }
   --frame-marker:var(--accent);
   --surface-etched:color-mix(in srgb,var(--surface) 76%,var(--bg-2));
   --coordinate-ink:var(--ink-4);
+  /* Steadholme 结构语言:粗犷来自承重关系,精度来自统一 gutter / rule / shadow。 */
+  --structure-rule:color-mix(in srgb,var(--ink) 78%,var(--border));
+  --structure-rule-heavy:var(--ink);
+  --structure-shadow:5px 5px 0 color-mix(in srgb,var(--ink) 18%,transparent);
+  --structure-shadow-hover:7px 7px 0 color-mix(in srgb,var(--ink) 22%,transparent);
+  --structure-cut:12px;
+  --canvas-max:1480px;
+  --canvas-gutter:clamp(16px,3vw,44px);
+  --display-size:clamp(44px,7vw,96px);
+  --display-leading:.92;
+  --display-tracking:-.055em;
   /* 淡描边变体(给 pill/tag 边框) */
   --ok-border:color-mix(in srgb,var(--ok) 24%,#fff); --warn-border:color-mix(in srgb,var(--warn) 24%,#fff);
   --down-border:color-mix(in srgb,var(--down) 24%,#fff); --info-border:color-mix(in srgb,var(--info) 24%,#fff);

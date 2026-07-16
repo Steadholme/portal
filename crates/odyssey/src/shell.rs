@@ -125,7 +125,7 @@ pub fn page_shell(chrome: PageChrome<'_>, body: Html, opts: ShellOpts) -> String
     page_shell_impl(chrome, body, opts, None, None)
 }
 
-/// Render the standard shell with the Odyssey 1.2 profile root contract.
+/// Render the standard shell with the Odyssey 1.3 profile root contract.
 ///
 /// This is a separate additive entry point so existing [`page_shell`] markup and default
 /// presentation remain compatible. Profiled pages stamp `data-ody-profile` on `<html>` and
@@ -154,7 +154,7 @@ pub fn wire_page_shell(
     page_shell_impl(chrome, body, opts, Some(wire), None)
 }
 
-/// Combine Wire navigation with the Odyssey 1.2 profile root contract.
+/// Combine Wire navigation with the Odyssey 1.3 profile root contract.
 ///
 /// It preserves the runtime and security boundaries of [`wire_page_shell`]; the profile only
 /// opts the rendered document into presentation semantics.
@@ -183,7 +183,7 @@ fn page_shell_impl(
         body_attr.push_str(" data-density=\"compact\"");
     }
     if profile.is_some() {
-        body_attr.push_str(" data-ody-shell=\"1.2\"");
+        body_attr.push_str(" data-ody-shell=\"1.3\"");
     }
     let wire_target = wire.map(|opts| format!("#{}", opts.region_id));
     let nav = render_nav(chrome.nav, wire_target.as_deref());
@@ -928,7 +928,7 @@ mod tests {
             Profile::Public,
         );
         assert!(public.contains("<html lang=\"en\" data-ody-profile=\"public\">"));
-        assert!(public.contains("<body data-ody-shell=\"1.2\">"));
+        assert!(public.contains("<body data-ody-shell=\"1.3\">"));
         assert!(public.contains("[data-ody-profile=\"public\"]"));
 
         let portal = wire_page_shell_with_profile(
@@ -939,7 +939,7 @@ mod tests {
             Profile::Portal,
         );
         assert!(portal.contains("data-ody-profile=\"portal\""));
-        assert!(portal.contains("data-ody-shell=\"1.2\""));
+        assert!(portal.contains("data-ody-shell=\"1.3\""));
         assert!(portal.contains("data-wire-nav=\"#odyssey-main\""));
         assert!(portal.contains("odyssey-wire v1"));
     }

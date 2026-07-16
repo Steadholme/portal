@@ -1,10 +1,11 @@
 /* GENERATED FROM odyssey — DO NOT EDIT */
 /* ============================================================================
-   Odyssey 1.2 canary · Steadholme profile + shell language
+   Odyssey 1.3 canary · Steadholme profile + structural language
    ----------------------------------------------------------------------------
    This layer is deliberately inert until a product opts in with the stable
-   root contract `data-ody-profile`. `data-ody-shell` adds the full mineral-grid
-   shell treatment. Unmarked 1.1 pages therefore keep their exact presentation.
+   root contract `data-ody-profile`. `data-ody-shell="1.3"` adds the refined
+   brutalist shell and structural primitives. Unmarked pages keep their exact
+   presentation; frozen 1.1 and 1.2 bundles are never rebuilt from this file.
 
    The rules bridge the internal Rust class vocabulary and the public `.ody-*`
    distribution without introducing per-product forks.
@@ -21,6 +22,16 @@
   --ody-profile-grid:var(--grid-line,var(--ody-grid-line));
   --ody-profile-surface:var(--surface-etched,var(--ody-surface-etched));
   --ody-profile-coordinate:var(--coordinate-ink,var(--ody-coordinate-ink));
+  --ody-structure-rule:var(--structure-rule,color-mix(in srgb,var(--ink,var(--ody-ink)) 78%,var(--border,var(--ody-border))));
+  --ody-structure-rule-heavy:var(--structure-rule-heavy,var(--ink,var(--ody-ink)));
+  --ody-structure-shadow:var(--structure-shadow,5px 5px 0 color-mix(in srgb,var(--ink,var(--ody-ink)) 18%,transparent));
+  --ody-structure-shadow-hover:var(--structure-shadow-hover,7px 7px 0 color-mix(in srgb,var(--ink,var(--ody-ink)) 22%,transparent));
+  --ody-structure-cut:var(--structure-cut,12px);
+  --ody-canvas-max:var(--canvas-max,1480px);
+  --ody-canvas-gutter:var(--canvas-gutter,clamp(16px,3vw,44px));
+  --ody-display-size:var(--display-size,clamp(44px,7vw,96px));
+  --ody-display-leading:var(--display-leading,.92);
+  --ody-display-tracking:var(--display-tracking,-.055em);
 }
 
 [data-ody-profile="public"],
@@ -73,6 +84,152 @@
     linear-gradient(to bottom,var(--ody-profile-grid) 1px,transparent 1px);
   background-size:48px 48px;
   background-position:-1px -1px;
+}
+
+/* 1.3 moves the survey grid from wallpaper to material: the canvas is calm
+   mineral paper and only a masthead or an explicitly marked survey field
+   exposes the plotted grid. This is deliberately version-scoped. */
+[data-ody-shell="1.3"]{
+  background-image:none;
+}
+[data-ody-shell="1.3"] :is(.console,.page,.ody-container){
+  max-width:var(--ody-canvas-max);
+}
+[data-ody-shell="1.3"] :is(.appbar,.topbar,.ody-appbar){
+  background:var(--surface,var(--ody-surface));
+  border-bottom:2px solid var(--ody-structure-rule-heavy);
+  box-shadow:none;
+  backdrop-filter:none;
+}
+[data-ody-shell="1.3"] :is(.card,.ody-card,.stat,.ody-stat,.table-wrap,.ody-table-wrap){
+  border-radius:0;
+}
+[data-ody-shell="1.3"] :is(.btn,.ody-btn,.input,.select,.textarea,.ody-input,.ody-select,.ody-textarea){
+  border-radius:2px;
+}
+
+/* Structural primitives. They expose a common grammar while leaving content,
+   hierarchy and responsive composition to the host product. */
+[data-ody-shell="1.3"] :is(.steadholme-canvas,.ody-canvas){
+  width:min(100%,var(--ody-canvas-max));
+  margin-inline:auto;
+  padding-inline:var(--ody-canvas-gutter);
+}
+[data-ody-shell="1.3"] :is(.steadholme-masthead,.ody-masthead){
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  border-block:2px solid var(--ody-structure-rule-heavy);
+  background-color:var(--surface,var(--ody-surface));
+  background-image:
+    linear-gradient(to right,var(--ody-profile-grid) 1px,transparent 1px),
+    linear-gradient(to bottom,var(--ody-profile-grid) 1px,transparent 1px);
+  background-size:clamp(64px,7vw,96px) clamp(64px,7vw,96px);
+}
+[data-ody-shell="1.3"] :is(.steadholme-masthead,.ody-masthead)::after{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  inset:0 0 0 auto;
+  width:min(34vw,420px);
+  background:var(--ody-profile-signal);
+  clip-path:polygon(42% 0,100% 0,100% 100%,0 100%);
+  opacity:.075;
+  pointer-events:none;
+}
+[data-ody-shell="1.3"] :is(.steadholme-display,.ody-display){
+  max-width:11ch;
+  margin:0;
+  font-size:var(--ody-display-size);
+  line-height:var(--ody-display-leading);
+  letter-spacing:var(--ody-display-tracking);
+  font-weight:800;
+  text-wrap:balance;
+}
+[data-ody-shell="1.3"] :is(.steadholme-coordinate,.ody-coordinate,.steadholme-index,.ody-index){
+  font:650 var(--fs-micro,var(--ody-fs-micro))/1.2 var(--mono,var(--ody-mono));
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ody-profile-coordinate);
+}
+[data-ody-shell="1.3"] :is(.steadholme-command,.ody-command){
+  display:flex;
+  align-items:center;
+  gap:var(--sp-3,var(--ody-sp-3));
+  min-height:52px;
+  padding-inline:var(--sp-4,var(--ody-sp-4));
+  border:0;
+  border-block:2px solid var(--ody-structure-rule-heavy);
+  border-radius:0;
+  background:var(--surface,var(--ody-surface));
+  color:var(--ink,var(--ody-ink));
+  box-shadow:none;
+}
+[data-ody-shell="1.3"] :is(.steadholme-command,.ody-command):focus-within{
+  box-shadow:inset 5px 0 0 var(--ody-profile-signal);
+}
+[data-ody-shell="1.3"] :is(.steadholme-panel,.ody-foundry-panel){
+  position:relative;
+  border:2px solid var(--ody-structure-rule-heavy);
+  background:var(--surface,var(--ody-surface));
+  box-shadow:var(--ody-structure-shadow);
+}
+[data-ody-shell="1.3"] :is(.steadholme-panel,.ody-foundry-panel)::before{
+  content:"";
+  position:absolute;
+  inset:0 0 auto;
+  height:4px;
+  background:linear-gradient(90deg,var(--ody-profile-signal) 0 88px,var(--ody-structure-rule-heavy) 88px 112px,transparent 112px);
+  pointer-events:none;
+}
+[data-ody-shell="1.3"] :is(.steadholme-band,.ody-band){
+  display:grid;
+  grid-template-columns:minmax(180px,3fr) minmax(0,9fr);
+  gap:clamp(24px,4vw,64px);
+  padding-block:clamp(32px,4vw,52px);
+  border-top:2px solid var(--ody-structure-rule-heavy);
+}
+[data-ody-shell="1.3"] :is(.steadholme-wall,.ody-wall){
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:1px;
+  padding:1px;
+  background:var(--ody-structure-rule);
+}
+[data-ody-shell="1.3"] :is(.steadholme-cell,.ody-cell){
+  min-width:0;
+  min-height:112px;
+  padding:var(--sp-5,var(--ody-sp-5));
+  border:0;
+  border-radius:0;
+  background:var(--surface,var(--ody-surface));
+  color:var(--ink,var(--ody-ink));
+}
+[data-ody-shell="1.3"] :is(a,button):is(.steadholme-cell,.ody-cell){
+  transition:transform var(--dur-2,var(--ody-dur,180ms)) var(--ease-out,var(--ody-ease)),box-shadow var(--dur-2,var(--ody-dur,180ms)) var(--ease-out,var(--ody-ease));
+}
+[data-ody-shell="1.3"] :is(a,button):is(.steadholme-cell,.ody-cell):hover{
+  position:relative;
+  z-index:1;
+  text-decoration:none;
+  transform:translate(-2px,-2px);
+  box-shadow:var(--ody-structure-shadow);
+}
+[data-ody-shell="1.3"] :is(a,button):is(.steadholme-cell,.ody-cell):active{
+  transform:translate(0,0);
+  box-shadow:none;
+}
+[data-ody-shell="1.3"] :is(.steadholme-status-rail,.ody-status-rail){
+  display:flex;
+  align-items:center;
+  gap:var(--sp-4,var(--ody-sp-4));
+  min-height:52px;
+  padding:var(--sp-3,var(--ody-sp-3)) var(--sp-4,var(--ody-sp-4));
+  border-block:2px solid var(--ody-structure-rule-heavy);
+  background:var(--surface-etched,var(--ody-surface-etched));
+  font:650 var(--fs-micro,var(--ody-fs-micro))/1.4 var(--mono,var(--ody-mono));
+  letter-spacing:.08em;
+  text-transform:uppercase;
 }
 
 /* Reusable product shell for bespoke templates. Existing page_shell markup also
@@ -235,6 +392,19 @@
     border-right:0;
     border-bottom:1px solid var(--ody-profile-rule);
   }
+  [data-ody-shell="1.3"] :is(.steadholme-band,.ody-band){grid-template-columns:1fr;gap:var(--sp-4,var(--ody-sp-4));}
+  [data-ody-shell="1.3"] :is(.steadholme-wall,.ody-wall){grid-template-columns:1fr;}
+  [data-ody-shell="1.3"] :is(.steadholme-status-rail,.ody-status-rail){align-items:flex-start;flex-wrap:wrap;}
+}
+
+@media (min-width:781px) and (max-width:1100px){
+  [data-ody-shell="1.3"] :is(.steadholme-band,.ody-band){grid-template-columns:1fr;gap:var(--sp-5,var(--ody-sp-5));}
+  [data-ody-shell="1.3"] :is(.steadholme-wall,.ody-wall){grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+@media (prefers-reduced-motion:reduce){
+  [data-ody-shell="1.3"] :is(a,button):is(.steadholme-cell,.ody-cell){transition:none;}
+  [data-ody-shell="1.3"] :is(a,button):is(.steadholme-cell,.ody-cell):hover{transform:none;}
 }
 
 @media (forced-colors:active){
@@ -242,4 +412,5 @@
   .steadholme-shell__rail,.ody-shell__rail,
   .holdfast-profile,.ody-profile,.holdfast-signal,.ody-signal{border-color:CanvasText;box-shadow:none;}
   [data-ody-profile] :is(.appnav,.nav__item,.ody-appbar__nav a,.ody-nav__item)[aria-current="page"]{outline:2px solid Highlight;box-shadow:none;}
+  [data-ody-shell="1.3"] :is(.steadholme-panel,.ody-foundry-panel),[data-ody-shell="1.3"] :is(.steadholme-wall,.ody-wall),[data-ody-shell="1.3"] :is(.steadholme-cell,.ody-cell){border-color:CanvasText;box-shadow:none;}
 }

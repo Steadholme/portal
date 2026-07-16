@@ -1,11 +1,11 @@
 // GENERATED FROM odyssey — DO NOT EDIT
-/*! odyssey-canary v1.2.0-canary.1 · public shell/profile enhancement */
+/*! odyssey-canary v1.3.0-canary.1 · public shell/profile enhancement */
 (function (window, document) {
   'use strict';
   var Odyssey = window.Odyssey;
   if (!Odyssey || Odyssey.canary) return;
 
-  var RELEASE = '1.2.0-canary.1';
+  var RELEASE = '1.3.0-canary.1';
   var PROFILES = [
     'ai', 'communication', 'content', 'control', 'data', 'developer', 'identity',
     'knowledge', 'networking', 'observability', 'portal', 'productivity', 'public',
