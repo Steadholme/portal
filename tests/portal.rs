@@ -272,15 +272,41 @@ async fn dashboard_renders_full_command_center() {
     let (status, html) = call(&state, get_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
 
-    // Greeting uses the email local-part (capitalized), rendered inside the gradient name span;
-    // the full email shows in the app-bar.
+    // Greeting uses the email local-part (capitalized) and exposes a stable identity hook;
+    // the full email remains available in the account disclosure.
     assert!(
-        html.contains(r#"class="grad">Alice"#),
+        html.contains(r#"data-user-name="Alice">Alice</span>"#),
         "greeting names the signed-in user"
     );
     assert!(
         html.contains("alice@steadholme.local"),
         "signed-in email rendered"
+    );
+    assert!(
+        html.contains(r#"<main id="top">"#),
+        "main landmark rendered"
+    );
+    assert!(
+        html.contains(r##"class="skiplink" href="#catalog""##),
+        "keyboard users can skip to the service catalog"
+    );
+    assert!(
+        html.contains(
+            r#"id="account-toggle" type="button" aria-expanded="false" aria-controls="account-popover""#
+        ),
+        "account disclosure exposes its controlled region"
+    );
+    assert!(
+        html.contains(r#"id="account-popover" aria-label="Account" hidden"#),
+        "account disclosure starts collapsed"
+    );
+    assert!(
+        !html.contains(r#"role="menu""#) && !html.contains(r#"role="menuitem""#),
+        "ordinary account links do not claim application-menu semantics"
+    );
+    assert!(
+        html.contains(r#"id="personalization-status" role="status" aria-live="polite""#),
+        "personalization changes have an independent live region"
     );
 
     // Live metric cards.
@@ -359,12 +385,12 @@ async fn dashboard_renders_full_command_center() {
         "tiles expose native title tooltips"
     );
     assert!(
-        html.contains("Platform &amp; Tools"),
-        "small public groups merge into Platform & Tools"
+        html.contains(r#"id="ident" data-section"#),
+        "identity keeps its own field band"
     );
     assert!(
-        !html.contains(r#"id="ident" data-section"#),
-        "single-app public ident section is merged away"
+        html.contains(r#"id="obs" data-section"#),
+        "observability keeps its own field band"
     );
     // Mail is LIVE now — no Coming-soon tile should remain.
     assert!(
@@ -383,7 +409,7 @@ async fn dashboard_renders_full_command_center() {
         "pinned apps empty state rendered"
     );
     assert!(
-        html.contains("Star an app to pin it here"),
+        html.contains("Use the star on any service"),
         "pinned apps empty state invites pinning"
     );
     assert!(
@@ -436,7 +462,7 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
     assert_eq!(status, StatusCode::OK);
 
     assert!(html.contains(r#"<html lang="en" data-ody-profile="portal">"#));
-    assert!(html.contains(r#"<body data-ody-shell="1.2">"#));
+    assert!(html.contains(r#"<body class="portal-home" data-ody-shell="1.3">"#));
     assert!(html.contains(r#"<link rel="icon" href="data:image/svg+xml,"#));
     assert!(
         html.contains("odyssey-wire v1"),
@@ -454,7 +480,7 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
     assert!(html.contains(r#"id="estate-live" role="region" aria-labelledby="estate-title""#));
     assert!(html.contains("One estate, three trust paths"));
     assert!(
-        html.contains("22 product surfaces"),
+        html.contains(r#"data-public-surface-count="22""#),
         "public count comes from Config catalog"
     );
     assert!(html.contains("Anonymous, read-only"));
@@ -652,7 +678,7 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
         .unwrap();
     let (status, external_fragment) = call(&state, external_wire).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(external_fragment.contains("1 of 1 systems operational"));
+    assert!(external_fragment.contains(r#"data-state="operational" data-up="1" data-total="1""#));
     assert!(!external_fragment.contains("reporting issues: CA"));
     assert!(!external_fragment.contains("of 51 systems"));
     assert!(!external_fragment.contains(r#"/51</span>"#));
@@ -719,8 +745,9 @@ async fn dashboard_wire_response_is_exact_read_only_live_region() {
     let fragment = String::from_utf8_lossy(&bytes);
 
     assert!(fragment.starts_with(
-        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title">"#
+        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title""#
     ));
+    assert!(fragment.contains(r#"data-access-scope="public""#));
     assert!(
         fragment.contains(r#"href="/?refresh=1#estate-live""#),
         "native GET fallback remains"
@@ -869,8 +896,8 @@ async fn dashboard_search_query_filters_server_side() {
         "non-matching app is filtered out"
     );
     assert!(
-        html.contains("Platform &amp; Tools"),
-        "single search result still follows merged section rules"
+        html.contains("Communication"),
+        "single search result keeps its semantic field band"
     );
 
     let (status, html) = call(&state, get_as("/?q=no-such-app", "alice@steadholme.local")).await;
@@ -893,7 +920,11 @@ async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
     .await;
     let state = state_with(&beacon, "http://127.0.0.1:1", "http://127.0.0.1:1");
 
-    let (status, html) = call(&state, get_as_zone("/", "alice@steadholme.local", "internal")).await;
+    let (status, html) = call(
+        &state,
+        get_as_zone("/", "alice@steadholme.local", "internal"),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
 
     assert!(
@@ -901,7 +932,7 @@ async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
         "internal sidebar links to the mgmt section"
     );
     assert!(
-        html.contains(r#"id="infraops" data-section"#),
+        html.contains(r#"id="infraops" data-access-scope="internal""#),
         "internal mgmt section rendered"
     );
     assert!(
@@ -909,11 +940,15 @@ async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
         "mgmt section title is escaped and visible"
     );
     assert!(
-        html.contains("27 apps"),
-        "all internal consoles are in one section"
+        html.contains(r#"data-internal-surface-count="27""#),
+        "all internal consoles are represented in the attested view"
     );
     assert!(
-        html.contains("27 management surfaces") && html.contains("Internal zone"),
+        html.contains("27 management surfaces")
+            && html.contains("Observe")
+            && html.contains("Protect")
+            && html.contains("Network")
+            && html.contains("Recover"),
         "the gateway-attested WireGuard plane is summarized"
     );
 
@@ -1011,7 +1046,10 @@ async fn dashboard_is_resilient_when_all_backends_down() {
         StatusCode::OK,
         "page renders even when every backend is down"
     );
-    assert!(html.contains("bob@steadholme.local"), "email still rendered");
+    assert!(
+        html.contains("bob@steadholme.local"),
+        "email still rendered"
+    );
 
     // Unknown tile status stays silent while placeholders continue to degrade gracefully.
     assert!(
@@ -1242,7 +1280,11 @@ async fn ops_gate_holds_with_audit_query_params() {
 
     let (status, _) = call(
         &state,
-        get_as_groups("/ops?actor=alice&page=99", "root@steadholme.local", "admins"),
+        get_as_groups(
+            "/ops?actor=alice&page=99",
+            "root@steadholme.local",
+            "admins",
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "admin passes with any query params");
@@ -1516,7 +1558,7 @@ async fn dashboard_without_gateway_identity_falls_back() {
         "falls back to a generic signed-in label"
     );
     assert!(
-        html.contains(r#"class="grad">Operator"#),
+        html.contains(r#"data-user-name="Operator">Operator</span>"#),
         "greeting falls back gracefully"
     );
 }

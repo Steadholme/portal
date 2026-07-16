@@ -172,11 +172,9 @@ fn render(
     let sidebar_nav = render_sidebar_nav(catalog, mgmt);
     let sections = render_dashboard_sections(catalog, mgmt, statuses, q);
     let estate_live = render_estate_live(
-        &name,
         snap,
         statuses,
         now_secs,
-        hour,
         EstateSummary {
             public_surface_count,
             internal_surface_count,
@@ -188,12 +186,20 @@ fn render(
         return estate_live;
     }
     let runtime = odyssey::dynamic_scripts_with(RuntimeOpts::new().with_motion());
+    let hero_telemetry = hero_sub(snap, statuses);
+    let greeting = greeting(hour);
     DASHBOARD_HTML
         .replace("{{CSS}}", app_css())
         .replace("{{SHIELD}}", SHIELD_SVG)
         .replace("{{INITIAL}}", &esc(&initial))
         .replace("{{NAME}}", &esc(&name))
         .replace("{{EMAIL}}", &esc(email))
+        .replace("{{GREETING}}", greeting)
+        .replace("{{HERO_SUB}}", &hero_telemetry)
+        .replace(
+            "{{PUBLIC_SURFACE_COUNT}}",
+            &public_surface_count.to_string(),
+        )
         .replace("{{HEALTH_CHIP}}", &health_chip(statuses))
         .replace("{{SIDEBAR_NAV}}", &sidebar_nav)
         .replace("{{ESTATE_LIVE}}", &estate_live)
@@ -308,11 +314,9 @@ fn hero_sub(snap: &Snapshot, statuses: &Statuses) -> String {
 /// replace it without invalidating the catalog nodes held by the launcher/pin/palette runtime.
 /// The same bytes are embedded in the full SSR document and returned for `X-Wire: 1`.
 fn render_estate_live(
-    name: &str,
     snap: &Snapshot,
     statuses: &Statuses,
     now_secs: i64,
-    hour: u32,
     summary: EstateSummary<'_>,
 ) -> String {
     let EstateSummary {
@@ -331,49 +335,78 @@ fn render_estate_live(
             .success_message("Estate snapshot refreshed")
             .error_message("Could not refresh the Estate snapshot"),
     );
+    let overall = if !statuses.reached || statuses.total == 0 {
+        "unknown"
+    } else if statuses.up == statuses.total {
+        "operational"
+    } else {
+        "degraded"
+    };
+    let access_scope = if internal_surface_count.is_some() {
+        "internal"
+    } else {
+        "public"
+    };
+    let access_label = if internal_surface_count.is_some() {
+        "Public + WireGuard routes"
+    } else {
+        "Public edge + restricted routes"
+    };
+    let internal_count_attr = internal_surface_count
+        .map(|count| format!(r#" data-internal-surface-count="{count}""#))
+        .unwrap_or_default();
+    let detail_open = if overall == "degraded" { " open" } else { "" };
     format!(
-        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title">
+        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title" data-state="{overall}" data-up="{up}" data-total="{total}" data-access-scope="{access_scope}" data-public-surface-count="{public_surface_count}"{internal_count_attr}>
 {incident}
-<div class="dash-hero">
-  <p class="kicker">Odyssey Estate · Sovereign product fabric</p>
-  <h1>{greeting}, <span class="grad">{name}</span></h1>
-  <p class="lede">{sub}</p>
+<div class="estate-rail ody-status-rail">
+  <span class="ody-index">ESTATE / LIVE</span>
+  <h2 id="estate-title">Estate pulse</h2>
+  {signal}
+  <span class="estate-rail__scope">{access_label}</span>
+  <span class="estate-rail__actions"><a href="https://status.w33d.xyz">Open status</a>{refresh}</span>
 </div>
-<section class="estate-deck" aria-label="Estate access planes">
-  <div class="estate-deck__head">
-    <div>
-      <p class="estate-deck__eyebrow">Access map · read-only</p>
-      <h2 id="estate-title">One estate, three trust paths</h2>
-    </div>
-    <div class="estate-deck__actions">
-      {manifest}
-      {signal}
-      <span class="estate-refresh">{refresh}</span>
+<details class="estate-detail"{detail_open}>
+  <summary><span>Estate details</span><span>Access map · fleet health · sealed activity</span></summary>
+  <div class="estate-detail__body">
+    <section class="estate-deck" aria-label="Estate access planes">
+      <div class="estate-deck__head">
+        <div>
+          <p class="estate-deck__eyebrow">Access map · read-only</p>
+          <h3>One estate, three trust paths</h3>
+        </div>
+        <div class="estate-deck__actions">{manifest}</div>
+      </div>
+      {planes}
+    </section>
+    <div class="estate-observe">
+      <section class="sys estate-health" id="sys" aria-labelledby="estate-health-title">
+        <div class="sys__head">
+          <h3 id="estate-health-title">Fleet health</h3>
+          <span class="hint">Beacon · Vitals · Watchtower</span>
+        </div>
+        <div class="metrics">{metrics}</div>
+      </section>
+      <section class="sys estate-activity" id="activity" aria-labelledby="estate-activity-title">
+        <div class="sys__head">
+          <h3 id="estate-activity-title">Recent signals</h3>
+          <span class="hint">Sealed audit events</span>
+        </div>
+        <div class="feedcard" data-motion-list>{activity}</div>
+      </section>
     </div>
   </div>
-  {planes}
-</section>
-<div class="estate-observe">
-  <section class="sys estate-health" id="sys" aria-labelledby="estate-health-title">
-    <div class="sys__head">
-      <h2 id="estate-health-title">Fleet health</h2>
-      <span class="hint">Beacon · Vitals · Watchtower</span>
-    </div>
-    <div class="metrics">{metrics}</div>
-  </section>
-  <section class="sys estate-activity" id="activity" aria-labelledby="estate-activity-title">
-    <div class="sys__head">
-      <h2 id="estate-activity-title">Recent signals</h2>
-      <span class="hint">Sealed audit events</span>
-    </div>
-    <div class="feedcard" data-motion-list>{activity}</div>
-  </section>
-</div>
+</details>
 </section>"#,
         incident = incident_banner(statuses),
-        greeting = greeting(hour),
-        name = esc(name),
-        sub = hero_sub(snap, statuses),
+        overall = overall,
+        up = statuses.up,
+        total = statuses.total,
+        access_scope = access_scope,
+        access_label = access_label,
+        public_surface_count = public_surface_count,
+        internal_count_attr = internal_count_attr,
+        detail_open = detail_open,
         manifest = render_manifest_signal(
             public_projection,
             estate_projection,
@@ -612,7 +645,7 @@ fn pct_width_opt(v: f64) -> f64 {
     pct_width(Some(v))
 }
 
-// --- App chiclets, grouped into Okta-style sections ------------------------------------
+// --- Service directory, grouped into Steadholme field bands -----------------------------
 
 /// The fixed section order + display label. A catalog entry is placed by [`category_key`];
 /// the section is rendered only when at least one app falls in it.
@@ -625,7 +658,13 @@ const SECTION_ORDER: &[(&str, &str)] = &[
     ("dev", "Developer & Platform"),
     ("more", "Platform & Tools"),
 ];
-const MIN_SECTION: usize = 3;
+const INTERNAL_SECTION_ORDER: &[(&str, &str)] = &[
+    ("observe", "Observe"),
+    ("protect", "Protect"),
+    ("ship", "Ship"),
+    ("network", "Network"),
+    ("recover", "Recover"),
+];
 
 /// Map a tile's display name to its section key. Unknown names land in "more" so a newly
 /// added service still renders cleanly without a code change.
@@ -678,25 +717,46 @@ fn grouped_catalog<'a>(
     }
 
     let mut out = Vec::new();
-    let mut more = Vec::new();
-    let more_label = SECTION_ORDER
-        .iter()
-        .find(|(key, _)| *key == "more")
-        .map(|(_, label)| *label)
-        .unwrap_or("Platform & Tools");
     for (key, label, apps) in buckets {
-        if key == "more" {
-            more.extend(apps);
-        } else if apps.len() >= MIN_SECTION {
+        if !apps.is_empty() {
             out.push((key, label, apps));
-        } else {
-            more.extend(apps);
         }
     }
-    if !more.is_empty() {
-        out.push(("more", more_label, more));
-    }
     out
+}
+
+fn internal_group_key(entry: &CatalogEntry) -> &'static str {
+    match entry.name.as_str() {
+        "Audit log" | "Vitals" | "Logs" | "Traces" | "RCA" => "observe",
+        "Authorization" | "Directory" | "Vault" | "SPIFFE" | "Risk" | "Intel" | "Guard"
+        | "Purple" | "Detonate" | "Canary" => "protect",
+        "CI" | "Deploy" | "Sites" | "Events" | "Jobs" | "Atlas" => "ship",
+        "DNS" | "Egress" | "Mesh" | "Edge" | "VPN enrollment" => "network",
+        "Backup" => "recover",
+        _ => "protect",
+    }
+}
+
+fn grouped_internal_catalog(
+    catalog: &[CatalogEntry],
+) -> Vec<(&'static str, &'static str, Vec<&CatalogEntry>)> {
+    let mut buckets: Vec<_> = INTERNAL_SECTION_ORDER
+        .iter()
+        .map(|(key, label)| (*key, *label, Vec::new()))
+        .collect();
+    for entry in catalog {
+        let key = internal_group_key(entry);
+        if let Some((_, _, apps)) = buckets
+            .iter_mut()
+            .find(|(candidate, _, _)| *candidate == key)
+        {
+            apps.push(entry);
+        }
+    }
+    buckets
+        .into_iter()
+        .filter(|(_, _, apps)| !apps.is_empty())
+        .collect()
 }
 
 fn filter_catalog(catalog: &[CatalogEntry], q: &str) -> Vec<CatalogEntry> {
@@ -712,8 +772,16 @@ fn filter_catalog(catalog: &[CatalogEntry], q: &str) -> Vec<CatalogEntry> {
 /// Render the app chiclets grouped into the fixed sections (Okta end-user dashboard layout).
 fn render_sections(catalog: &[CatalogEntry], statuses: &Statuses) -> String {
     let mut out = String::new();
-    for (key, label, apps) in grouped_catalog(catalog) {
-        out.push_str(&render_app_section(key, key, label, &apps, statuses));
+    for (index, (key, label, apps)) in grouped_catalog(catalog).into_iter().enumerate() {
+        out.push_str(&render_app_section(
+            key,
+            key,
+            label,
+            &format!("{:02}", index + 1),
+            &apps,
+            statuses,
+            "public",
+        ));
     }
     out
 }
@@ -737,14 +805,26 @@ fn render_dashboard_sections(
     let mut out = render_sections(catalog, statuses);
     if let Some(mgmt) = mgmt {
         if !mgmt.is_empty() {
-            let apps: Vec<&CatalogEntry> = mgmt.iter().collect();
-            out.push_str(&render_app_section(
-                MGMT_SECTION_ID,
-                MGMT_SECTION_STYLE,
-                MGMT_SECTION_LABEL,
-                &apps,
-                statuses,
+            out.push_str(&format!(
+                r#"<section class="internal-zone ody-foundry-panel" id="{id}" data-access-scope="internal" aria-labelledby="{id}-title"><header class="internal-zone__head"><p class="ody-index">BACKSTAGE / INTERNAL ZONE</p><h2 id="{id}-title">{label}</h2><p>{count} management surfaces · WireGuard boundary</p></header>"#,
+                id = MGMT_SECTION_ID,
+                label = MGMT_SECTION_LABEL,
+                count = mgmt.len(),
             ));
+            for (index, (key, label, apps)) in
+                grouped_internal_catalog(mgmt).into_iter().enumerate()
+            {
+                out.push_str(&render_app_section(
+                    &format!("{MGMT_SECTION_ID}-{key}"),
+                    MGMT_SECTION_STYLE,
+                    label,
+                    &format!("B{:02}", index + 1),
+                    &apps,
+                    statuses,
+                    "internal",
+                ));
+            }
+            out.push_str("</section>");
         }
     }
     out
@@ -754,18 +834,27 @@ fn render_app_section(
     section_id: &str,
     style_key: &str,
     label: &str,
+    index: &str,
     apps: &[&CatalogEntry],
     statuses: &Statuses,
+    access_scope: &str,
 ) -> String {
     let mut out = format!(
-        r#"<section class="appsec appsec--{style}" id="{id}" data-section><h2 class="appsec__title"><span class="pip"></span><span class="nm">{label}</span><span class="ct">{count} apps</span><span class="ln"></span></h2><div class="appgrid">"#,
+        r#"<section class="appsec appsec--{style} ody-band" id="{id}" data-section data-access-scope="{access_scope}" aria-labelledby="{id}-title"><header class="appsec__head"><span class="ody-index">{index}</span><h2 id="{id}-title">{label}</h2><p>{count} {unit}</p></header><div class="appgrid ody-wall">"#,
         style = style_key,
         id = section_id,
         label = esc(label),
         count = apps.len(),
+        unit = if apps.len() == 1 {
+            "service"
+        } else {
+            "services"
+        },
+        index = esc(index),
+        access_scope = access_scope,
     );
     for entry in apps {
-        out.push_str(&render_app(entry, statuses));
+        out.push_str(&render_app(entry, statuses, access_scope));
     }
     out.push_str("</div></section>");
     out
@@ -773,7 +862,7 @@ fn render_app_section(
 
 /// One app chiclet: a category-tinted icon tile, the app name + description, and a live status
 /// dot (top-right). Coming-soon services show a "Soon" badge and an accent dot.
-fn render_app(entry: &CatalogEntry, statuses: &Statuses) -> String {
+fn render_app(entry: &CatalogEntry, statuses: &Statuses, access_scope: &str) -> String {
     let cat = category_key(entry);
     let soon_badge = if entry.coming_soon {
         r#"<span class="app__soon">Soon</span>"#.to_string()
@@ -796,6 +885,11 @@ fn render_app(entry: &CatalogEntry, statuses: &Statuses) -> String {
             _ => String::new(),
         }
     };
+    let health = if entry.coming_soon {
+        "soon"
+    } else {
+        statuses.status_of(&entry.component)
+    };
     // Lowercased name+description backs the client-side app search filter.
     let data_name = esc(&format!("{} {}", entry.name, entry.description).to_lowercase());
     let app_id = esc(&entry.url);
@@ -816,8 +910,8 @@ fn render_app(entry: &CatalogEntry, statuses: &Statuses) -> String {
         esc(&format!("{} — {}", entry.name, entry.description))
     };
     format!(
-        r#"<div class="appwrap" data-app-id="{id}" data-product-id="{product_id}">
-<a class="app app--{cat}" href="{url}" title="{tooltip}" data-name="{dn}" data-app-id="{id}" data-product-id="{product_id}"{profile}>
+        r#"<div class="appwrap" data-app-id="{id}" data-product-id="{product_id}" data-health="{health}" data-access-scope="{access_scope}">
+<a class="app app--{cat} ody-cell" href="{url}" title="{tooltip}" data-name="{dn}" data-app-id="{id}" data-product-id="{product_id}" data-health="{health}" data-access-scope="{access_scope}"{profile}>
   {soon}
   {status}
   <span class="app__icon" aria-hidden="true">{icon}</span>
@@ -830,6 +924,8 @@ fn render_app(entry: &CatalogEntry, statuses: &Statuses) -> String {
 </div>"#,
         id = app_id,
         product_id = product_id,
+        health = health,
+        access_scope = access_scope,
         profile = profile,
         cat = cat,
         url = esc(&entry.url),

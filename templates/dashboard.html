@@ -8,115 +8,108 @@
   <title>w33d · Odyssey Estate</title>
   <style>{{CSS}}</style>
 </head>
-<body data-ody-shell="1.2">
-  <div class="shell">
-    <aside class="sidebar" id="sidebar" aria-label="Primary">
-      <a class="sidebar__brand" href="/" aria-label="Steadholme home">
-        <span class="sidebar__shield" aria-hidden="true">{{SHIELD}}</span>
-        <span class="sidebar__wordmark"><b>w33d</b><span>Steadholme</span></span>
+<body class="portal-home" data-ody-shell="1.3">
+  <a class="skiplink" href="#catalog">Skip to service catalog</a>
+  <header class="portalbar">
+    <a class="portalbar__brand" href="/" aria-label="Steadholme home">
+      <span class="portalbar__mark" aria-hidden="true">{{SHIELD}}</span>
+      <span class="portalbar__wordmark"><b>W33D</b><span>/ STEADHOLME</span></span>
+    </a>
+    <div class="portalbar__actions">
+      {{HEALTH_CHIP}}
+      <a class="iconbtn portalbar__notify" href="https://notify.w33d.xyz" title="Notifications" aria-label="Notifications">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
       </a>
-
-      <nav class="sidebar__nav">
-        <a class="nav__item is-active" href="#top" data-spy="top">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          <span class="nav__text">Estate</span>
-        </a>
-
-        <p class="nav__label">Catalog</p>
-        {{SIDEBAR_NAV}}
-
-        <div class="nav__divider"></div>
-
-        <a class="nav__item" href="#sys" data-spy="sys">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
-          <span class="nav__text">System Health</span>
-        </a>
-        <a class="nav__item" href="#activity" data-spy="activity">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-          <span class="nav__text">Activity</span>
-        </a>
-        <a class="nav__item" href="https://status.w33d.xyz" target="_blank" rel="noopener">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12a10 10 0 1 1-5-8.7"/><path d="m9 12 2 2 5-5"/></svg>
-          <span class="nav__text">Status page</span>
-          <svg class="nav__ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
-        </a>
-      </nav>
-
-      <div class="usermenu sidebar__user" id="usermenu">
-        <button class="usermenu__btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+      <div class="usermenu portalbar__user" id="usermenu">
+        <button class="usermenu__btn" id="account-toggle" type="button" aria-expanded="false" aria-controls="account-popover" aria-label="Account links">
           <span class="avatar" aria-hidden="true">{{INITIAL}}</span>
-          <span class="sidebar__who">
-            <span class="sidebar__name">{{NAME}}</span>
-            <span class="sidebar__mail">{{EMAIL}}</span>
-          </span>
+          <span class="usermenu__name">{{NAME}}</span>
           <svg class="usermenu__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="usermenu__pop" role="menu" aria-label="Account">
+        <div class="usermenu__pop" id="account-popover" aria-label="Account" hidden>
           <div class="usermenu__head">
             <span class="avatar avatar--lg" aria-hidden="true">{{INITIAL}}</span>
             <span><b>{{NAME}}</b><span>{{EMAIL}}</span></span>
           </div>
-          <a class="menuitem" role="menuitem" href="https://account.w33d.xyz">
+          <a class="menuitem" href="https://account.w33d.xyz">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
             Account
           </a>
-          <a class="menuitem" role="menuitem" href="https://w33d.xyz">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-            All apps
+          <a class="menuitem" href="https://w33d.xyz">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            All services
           </a>
-          <a class="menuitem menuitem--danger sidebar__out" role="menuitem" href="https://sso.w33d.xyz/_gw/auth/logout" title="Sign out" aria-label="Sign out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
+          <a class="menuitem menuitem--danger" href="https://sso.w33d.xyz/_gw/auth/logout" title="Sign out" aria-label="Sign out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
             Sign out
           </a>
         </div>
       </div>
-    </aside>
+    </div>
+  </header>
 
-    <div class="main">
-      <header class="topbar">
-        <button class="topbar__burger" id="burger" aria-label="Toggle menu" aria-expanded="false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </button>
-        <div class="topbar__title">
-          <strong>Odyssey Estate</strong>
-          <span>Product bridge</span>
+  <main id="top">
+    <section class="portal-hero ody-masthead" aria-labelledby="portal-title">
+      <div class="portal-canvas ody-canvas">
+        <div class="portal-hero__coordinate">
+          <span class="ody-coordinate">W33D / STEADHOLME</span>
+          <span class="ody-coordinate">FIELD INDEX // 001</span>
         </div>
-        <form class="search" role="search" method="get" action="/">
+        <h1 class="ody-display" id="portal-title">{{GREETING}},<br><span data-user-name="{{NAME}}">{{NAME}}</span>.</h1>
+        <p class="portal-hero__line">Everything you run, one front door.</p>
+        <p class="portal-hero__telemetry">{{HERO_SUB}}</p>
+        <form class="search ody-command" role="search" method="get" action="/">
           <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <input id="appsearch" name="q" value="{{SEARCH_VALUE}}" type="search" placeholder="Search your apps" autocomplete="off" aria-label="Search your apps">
+          <input id="appsearch" name="q" value="{{SEARCH_VALUE}}" type="search" placeholder="Find a service" autocomplete="off" aria-label="Find a service" aria-describedby="search-results-status">
           <kbd class="search__kbd">/</kbd>
         </form>
-        <div class="topbar__right">
-          {{HEALTH_CHIP}}
-          <a class="iconbtn" href="https://notify.w33d.xyz" title="Notifications" aria-label="Notifications">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-          </a>
+      </div>
+    </section>
+
+    <div class="portal-canvas ody-canvas">
+      {{ESTATE_LIVE}}
+
+      <section class="personalapps" id="personalapps" aria-labelledby="working-set-title">
+        <div class="personalapps__head">
+          <div>
+            <p class="ody-index">PERSONAL / LOCAL</p>
+            <h2 id="working-set-title">Working set</h2>
+          </div>
+          <p>Recent momentum and the services you pin stay on this device.</p>
         </div>
-      </header>
-
-      <div class="content" id="top">
-        {{ESTATE_LIVE}}
-
-        <div class="personalapps" id="personalapps" aria-live="polite">
+        <div class="personalapps__stage">
           <section class="quicksec quicksec--empty" id="pinnedapps" aria-label="Pinned">
-            <h2 class="quicksec__title"><span class="pip"></span><span class="nm">Pinned</span><span class="ln"></span></h2>
-            <p class="quicksec__hint">Star an app to pin it here — your favourites stay on top.</p>
+            <h3 class="quicksec__title"><span class="nm">Pinned</span><span class="ln"></span></h3>
+            <p class="quicksec__hint">Use the star on any service to build your working set.</p>
           </section>
         </div>
+      </section>
+      <div class="sr-only" id="personalization-status" role="status" aria-live="polite"></div>
 
-        <div id="appsections">
-          {{SECTIONS}}
+      <section class="catalog-intro" id="catalog" aria-labelledby="catalog-title">
+        <p class="ody-index">SURFACE DIRECTORY / {{PUBLIC_SURFACE_COUNT}}</p>
+        <div class="catalog-intro__copy">
+          <h2 id="catalog-title">Every service.<br>Nothing hidden.</h2>
+          <p>One sign-on across the whole estate. Browse by field or press <kbd>⌘ K</kbd> to launch.</p>
         </div>
-        <div class="noresults" id="noresults">No apps match your search.</div>
+      </section>
+      <nav class="catalog-nav" aria-label="Service categories">
+        <a class="nav__item is-active" href="#catalog" data-spy="catalog">All surfaces</a>
+        {{SIDEBAR_NAV}}
+      </nav>
 
-        <footer class="site-foot">
-          <span>Steadholme · Sovereign infrastructure</span>
-          <span>One sign-on across every service.</span>
-        </footer>
+      <div id="appsections">
+        {{SECTIONS}}
       </div>
+      <div class="noresults" id="noresults" role="status">No services match your search.</div>
+      <div class="sr-only" id="search-results-status" role="status" aria-live="polite"></div>
+
+      <footer class="site-foot portal-foot">
+        <span>STEADHOLME // SOVEREIGN INFRASTRUCTURE</span>
+        <span>ONE SIGN-ON. EVERY SERVICE.</span>
+      </footer>
     </div>
-  </div>
-  <div class="scrim" id="scrim" hidden></div>
+  </main>
   <div class="palette" id="cmdpalette" role="dialog" aria-modal="true" aria-labelledby="cmdtitle" hidden>
     <div class="palette__panel">
       <div class="palette__head">
@@ -140,16 +133,18 @@
   {{ODYSSEY_RUNTIME}}
   <script>
   (function () {
-    var sidebar = document.getElementById('sidebar'),
-        burger = document.getElementById('burger'),
-        scrim = document.getElementById('scrim');
-    function setMenu(open) {
-      document.body.classList.toggle('nav-open', open);
-      if (scrim) scrim.hidden = !open;
-      if (burger) burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var userMenu = document.getElementById('usermenu'),
+        userButton = document.getElementById('account-toggle'),
+        userPopover = document.getElementById('account-popover');
+    function setAccount(open, restoreFocus) {
+      if (!userButton || !userPopover) return;
+      userPopover.hidden = !open;
+      userButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (!open && restoreFocus) userButton.focus();
     }
-    if (burger) burger.addEventListener('click', function () { setMenu(!document.body.classList.contains('nav-open')); });
-    if (scrim) scrim.addEventListener('click', function () { setMenu(false); });
+    if (userButton) userButton.addEventListener('click', function () {
+      setAccount(userButton.getAttribute('aria-expanded') !== 'true', false);
+    });
 
     function textOf(el) {
       return el ? (el.textContent || '').trim() : '';
@@ -166,25 +161,37 @@
       var tag = (el.tagName || '').toLowerCase();
       return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
     }
+    document.addEventListener('click', function (e) {
+      if (userMenu && !closest(e.target, '#usermenu')) setAccount(false, false);
+    });
+    if (userMenu) userMenu.addEventListener('focusout', function () {
+      window.setTimeout(function () {
+        if (!userMenu.contains(document.activeElement)) setAccount(false, false);
+      }, 0);
+    });
 
     // Search: filter app cards by name+description, hide emptied sections.
     var box = document.getElementById('appsearch'),
         sections = function () { return document.querySelectorAll('#appsections [data-section]'); },
-        none = document.getElementById('noresults');
+        none = document.getElementById('noresults'),
+        personal = document.getElementById('personalapps'),
+        searchStatus = document.getElementById('search-results-status');
     function applySearch() {
-      var q = (box.value || '').trim().toLowerCase(), anyVisible = false;
+      var q = (box.value || '').trim().toLowerCase(), anyVisible = false, total = 0;
       sections().forEach(function (sec) {
         var shown = 0;
         sec.querySelectorAll('.app').forEach(function (a) {
           var hit = !q || (a.getAttribute('data-name') || '').indexOf(q) !== -1;
           var tile = closest(a, '.appwrap') || a;
           tile.style.display = hit ? '' : 'none';
-          if (hit) shown++;
+          if (hit) { shown++; total++; }
         });
         sec.style.display = shown ? '' : 'none';
         if (shown) anyVisible = true;
       });
       none.classList.toggle('show', !anyVisible);
+      if (personal) personal.hidden = Boolean(q);
+      if (searchStatus) searchStatus.textContent = q ? total + (total === 1 ? ' service' : ' services') + ' found.' : '';
     }
     if (box) {
       box.addEventListener('input', applySearch);
@@ -196,7 +203,8 @@
     var pinnedKey = 'holdfast.portal.pinnedApps.v1',
         recentKey = 'holdfast.portal.recentApps.v1',
         recentLimit = 6,
-        personal = document.getElementById('personalapps'),
+        personalizationStatus = document.getElementById('personalization-status'),
+        personalStage = personal && personal.querySelector('.personalapps__stage'),
         palette = document.getElementById('cmdpalette'),
         paletteInput = document.getElementById('cmdinput'),
         paletteResults = document.getElementById('cmdresults'),
@@ -290,7 +298,7 @@
         btn.setAttribute('title', label);
       });
     }
-    function createQuickTile(app) {
+    function createQuickTile(app, variant) {
       var wrap = document.createElement('div'),
           link = document.createElement('a'),
           soon = app.link.querySelector('.app__soon'),
@@ -298,10 +306,10 @@
           icon = app.link.querySelector('.app__icon'),
           name = document.createElement('span'),
           desc = document.createElement('span');
-      wrap.className = 'appwrap appwrap--compact';
+      wrap.className = 'appwrap appwrap--compact' + (variant === 'continue' ? ' appwrap--continue' : '');
       wrap.setAttribute('data-app-id', app.id);
       if (app.productId) wrap.setAttribute('data-product-id', app.productId);
-      link.className = app.className + ' app--compact';
+      link.className = app.className + ' app--compact' + (variant === 'continue' ? ' app--continue' : '');
       link.href = app.href;
       link.title = app.desc ? app.name + ' — ' + app.desc : app.name;
       link.setAttribute('data-app-id', app.id);
@@ -322,7 +330,7 @@
       return wrap;
     }
     function sectionTitle(label, count, recent) {
-      var title = document.createElement('h2'),
+      var title = document.createElement('h3'),
           pip = document.createElement('span'),
           nm = document.createElement('span'),
           ct = document.createElement('span'),
@@ -351,7 +359,7 @@
       grid.className = 'quickgrid' + (recent ? ' quickgrid--strip' : '');
       ids.forEach(function (appId) {
         var app = findApp(appId);
-        if (app) grid.appendChild(createQuickTile(app));
+        if (app) grid.appendChild(createQuickTile(app, 'pinned'));
       });
       sec.appendChild(sectionTitle(label, ids.length, recent));
       sec.appendChild(grid);
@@ -364,30 +372,59 @@
       sec.id = 'pinnedapps';
       sec.setAttribute('aria-label', 'Pinned');
       hint.className = 'quicksec__hint';
-      hint.textContent = 'Star an app to pin it here — your favourites stay on top.';
+      hint.textContent = 'Use the star on any service to build this set.';
       sec.appendChild(sectionTitle('Pinned'));
       sec.appendChild(hint);
       return sec;
     }
+    function createContinueSection(app) {
+      var sec = document.createElement('section'),
+          grid = document.createElement('div'),
+          hint;
+      sec.className = 'quicksec quicksec--continue';
+      sec.id = 'continueapp';
+      sec.setAttribute('aria-label', 'Continue');
+      grid.className = 'quickgrid quickgrid--continue';
+      sec.appendChild(sectionTitle('Continue'));
+      if (app) grid.appendChild(createQuickTile(app, 'continue'));
+      else {
+        hint = document.createElement('p');
+        hint.className = 'quicksec__hint';
+        hint.textContent = 'Open a service and your latest route will appear here.';
+        grid.appendChild(hint);
+      }
+      sec.appendChild(grid);
+      return sec;
+    }
     function renderPersonalApps() {
-      if (!personal) return;
+      if (!personalStage) return;
       pinnedIds = knownIds(pinnedIds);
       recentIds = knownIds(recentIds, recentLimit);
-      while (personal.firstChild) personal.removeChild(personal.firstChild);
-      if (pinnedIds.length) personal.appendChild(createQuickSection('pinnedapps', 'Pinned', pinnedIds, false));
-      else personal.appendChild(createEmptyPinned());
-      if (recentIds.length) personal.appendChild(createQuickSection('recentapps', 'Recent', recentIds, true));
+      while (personalStage.firstChild) personalStage.removeChild(personalStage.firstChild);
+      personalStage.appendChild(createContinueSection(findApp(recentIds[0])));
+      if (pinnedIds.length) personalStage.appendChild(createQuickSection('pinnedapps', 'Pinned', pinnedIds, false));
+      else personalStage.appendChild(createEmptyPinned());
       syncPinButtons();
     }
     function togglePin(id) {
       var next = pinnedIds.slice(),
-          at = next.indexOf(id);
-      if (!findApp(id)) return;
+          at = next.indexOf(id),
+          app = findApp(id),
+          restoreCatalogFocus = Boolean(closest(document.activeElement, '#personalapps'));
+      if (!app) return;
       if (at === -1) next.unshift(id);
       else next.splice(at, 1);
       pinnedIds = knownIds(next);
       writeList(pinnedKey, pinnedIds);
       renderPersonalApps();
+      if (personalizationStatus) personalizationStatus.textContent = (at === -1 ? 'Pinned ' : 'Unpinned ') + app.name + '.';
+      if (restoreCatalogFocus) {
+        Array.prototype.slice.call(document.querySelectorAll('#appsections [data-pin-button]')).some(function (button) {
+          if (button.getAttribute('data-app-id') !== id) return false;
+          button.focus();
+          return true;
+        });
+      }
     }
     function recordRecent(id) {
       if (!findApp(id)) return;
@@ -473,6 +510,7 @@
     }
     function openPalette(seed) {
       if (!palette || !paletteInput) return;
+      setAccount(false, false);
       previousFocus = document.activeElement;
       palette.hidden = false;
       paletteOpen = true;
@@ -541,6 +579,11 @@
         if (key === 'Tab') trapPaletteTab(e);
         return;
       }
+      if (key === 'Escape' && userButton && userButton.getAttribute('aria-expanded') === 'true') {
+        e.preventDefault();
+        setAccount(false, true);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && key.toLowerCase() === 'k') {
         e.preventDefault();
         openPalette('');
@@ -555,16 +598,25 @@
       }
     });
     renderPersonalApps();
+    applySearch();
 
-    // Nav: smooth scroll + scroll-spy active state.
-    var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav__item[data-spy]'));
+    // Catalog route index: accessible current state + reduced-motion-safe scrolling.
+    var navItems = Array.prototype.slice.call(document.querySelectorAll('.catalog-nav .nav__item[data-spy]'));
     function setActive(id) {
-      navItems.forEach(function (n) { n.classList.toggle('is-active', n.getAttribute('data-spy') === id); });
+      navItems.forEach(function (n) {
+        var active = n.getAttribute('data-spy') === id;
+        n.classList.toggle('is-active', active);
+        if (active) n.setAttribute('aria-current', 'location');
+        else n.removeAttribute('aria-current');
+      });
+    }
+    function prefersReducedMotion() {
+      return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     }
     navItems.forEach(function (n) {
       n.addEventListener('click', function (e) {
         var id = n.getAttribute('data-spy'), el = document.getElementById(id);
-        if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActive(id); setMenu(false); }
+        if (el) { e.preventDefault(); el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' }); setActive(id); }
       });
     });
     var spied = navItems.map(function (n) { return n.getAttribute('data-spy'); });

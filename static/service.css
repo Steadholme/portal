@@ -532,3 +532,560 @@ body.palette-open { overflow:hidden; }
   .ops-select,
   .ops-input--epoch { flex:1 1 100%; }
 }
+
+/* ========================================================================== */
+/* Portal home · Steadholme Field Console (Odyssey 1.3 design canary)          */
+/* ========================================================================== */
+
+.portal-home {
+  --cat-ai:#865165;
+  --cat-comms:#a64c2d;
+  --cat-content:#356f73;
+  --cat-dev:#3f6d54;
+  --cat-ident:#625b78;
+  --cat-more:#5f665b;
+  --cat-obs:#486a82;
+  --portal-rule:var(--structure-rule);
+  --portal-rule-heavy:var(--structure-rule-heavy);
+  --portal-shadow:var(--structure-shadow);
+  overflow-x:hidden;
+  background:var(--bg);
+}
+
+.portal-home .skiplink {
+  position:fixed;
+  z-index:120;
+  inset:10px auto auto 10px;
+  padding:10px 14px;
+  color:var(--surface);
+  background:var(--ink);
+  transform:translateY(-160%);
+}
+.portal-home .skiplink:focus { transform:translateY(0); }
+
+.portal-home .sr-only {
+  position:absolute!important;
+  width:1px!important;
+  height:1px!important;
+  padding:0!important;
+  margin:-1px!important;
+  overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;
+  white-space:nowrap!important;
+  border:0!important;
+}
+
+.portal-home .portalbar {
+  position:sticky;
+  z-index:70;
+  top:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  min-height:72px;
+  padding:0 var(--canvas-gutter);
+  border-bottom:2px solid var(--portal-rule-heavy);
+  background:color-mix(in srgb,var(--surface) 96%,transparent);
+  box-shadow:inset 0 4px 0 var(--accent);
+}
+.portal-home .portalbar__brand {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  color:var(--ink);
+  text-decoration:none;
+}
+.portal-home .portalbar__brand:hover { text-decoration:none; }
+.portal-home .portalbar__mark {
+  display:grid;
+  width:38px;
+  height:38px;
+  place-items:center;
+  color:var(--accent);
+}
+.portal-home .portalbar__mark svg { width:100%;height:100%; }
+.portal-home .portalbar__wordmark {
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  font-family:var(--mono);
+  line-height:1;
+  letter-spacing:.12em;
+}
+.portal-home .portalbar__wordmark b { font-size:14px;font-weight:800; }
+.portal-home .portalbar__wordmark span { color:var(--ink-3);font-size:11px;font-weight:650; }
+.portal-home .portalbar__actions { display:flex;align-items:center;gap:10px; }
+.portal-home .portalbar .healthchip {
+  height:38px;
+  border:1px solid var(--portal-rule);
+  border-radius:0;
+  background:transparent;
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.portal-home .portalbar .iconbtn {
+  width:40px;
+  height:40px;
+  border:1px solid transparent;
+  border-radius:0;
+}
+.portal-home .portalbar .iconbtn:hover { border-color:var(--portal-rule);background:var(--surface-2); }
+.portal-home .portalbar__user .usermenu__btn {
+  height:40px;
+  border:1px solid var(--portal-rule);
+  border-radius:0;
+  background:var(--surface);
+}
+.portal-home .portalbar__user .avatar { border-radius:2px; }
+.portal-home .portalbar__user .usermenu__pop {
+  top:calc(100% + 9px);
+  width:280px;
+  border:2px solid var(--portal-rule-heavy);
+  border-radius:0;
+  box-shadow:var(--portal-shadow);
+}
+.portal-home .portalbar__user .usermenu__pop[hidden] { display:none; }
+.portal-home .portalbar__user .menuitem { min-height:44px;border-radius:0; }
+
+.portal-home .portal-hero {
+  min-height:clamp(520px,68vh,760px);
+  display:flex;
+  align-items:center;
+  margin-top:-2px;
+}
+.portal-home .portal-canvas { width:100%; }
+.portal-home .portal-hero .portal-canvas { padding-block:clamp(64px,9vw,124px); }
+.portal-home .portal-hero__coordinate {
+  display:flex;
+  justify-content:space-between;
+  gap:24px;
+  margin-bottom:clamp(44px,7vw,86px);
+}
+.portal-home .portal-hero h1 { color:var(--ink); }
+.portal-home .portal-hero h1 span { color:var(--accent-ink); }
+.portal-home .portal-hero__line {
+  max-width:760px;
+  margin:26px 0 0;
+  color:var(--ink-2);
+  font-size:clamp(18px,2.1vw,29px);
+  line-height:1.25;
+  letter-spacing:-.025em;
+}
+.portal-home .portal-hero__telemetry {
+  margin:12px 0 0;
+  color:var(--ink-3);
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.portal-home .search {
+  width:min(860px,100%);
+  max-width:none;
+  margin:clamp(42px,6vw,72px) 0 0;
+  padding-inline:18px 14px;
+}
+.portal-home .search__icon { position:static;width:22px;height:22px;color:var(--accent); }
+.portal-home .search input {
+  min-width:0;
+  height:52px;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:var(--ink);
+  font-size:17px;
+  box-shadow:none;
+}
+.portal-home .search input:focus { border:0;background:transparent;box-shadow:none; }
+.portal-home .search__kbd { position:static;margin-left:auto;border-radius:0;background:transparent; }
+
+.portal-home > main > .portal-canvas { padding-top:clamp(28px,4vw,54px); }
+.portal-home .estate-live { margin-bottom:clamp(64px,8vw,112px);scroll-margin-top:96px; }
+.portal-home .estate-rail {
+  display:grid;
+  grid-template-columns:auto auto auto minmax(180px,1fr) auto;
+  margin:0;
+  padding-inline:0;
+  background:transparent;
+}
+.portal-home .estate-rail h2 {
+  font:750 12px/1 var(--mono);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.portal-home .estate-rail .estate-signal {
+  min-height:28px;
+  padding:0 9px;
+  border-radius:0;
+  font-family:var(--mono);
+}
+.portal-home .estate-rail__scope { color:var(--ink-3); }
+.portal-home .estate-rail__actions {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:14px;
+  white-space:nowrap;
+}
+.portal-home .estate-rail__actions a {
+  color:var(--ink);
+  font-weight:700;
+  text-decoration:underline;
+  text-decoration-thickness:1px;
+  text-underline-offset:4px;
+}
+.portal-home .estate-detail { border-bottom:1px solid var(--portal-rule); }
+.portal-home .estate-detail > summary {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  min-height:52px;
+  padding:10px 0;
+  color:var(--ink-2);
+  cursor:pointer;
+  list-style:none;
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.portal-home .estate-detail > summary::-webkit-details-marker { display:none; }
+.portal-home .estate-detail > summary > span:first-child { color:var(--accent-ink);font-weight:750; }
+.portal-home .estate-detail > summary > span:first-child::before { content:"+ "; }
+.portal-home .estate-detail[open] > summary > span:first-child::before { content:"− "; }
+.portal-home .estate-detail__body {
+  display:grid;
+  gap:20px;
+  padding:22px 0 32px;
+  animation:portal-rise var(--dur-2) var(--ease-out);
+}
+.portal-home .estate-deck {
+  margin:0;
+  padding:20px;
+  border:1px solid var(--portal-rule);
+  border-radius:0;
+  box-shadow:none;
+}
+.portal-home .estate-deck::before { width:3px;background:var(--accent); }
+.portal-home .estate-deck__head h3 { font-size:20px; }
+.portal-home .estate-plane { border-radius:0;box-shadow:none; }
+.portal-home .estate-observe { grid-template-columns:minmax(0,3fr) minmax(300px,2fr); }
+.portal-home .estate-observe .metric,
+.portal-home .estate-observe .feedcard { border-radius:0;box-shadow:none; }
+
+.portal-home .personalapps {
+  margin:0 0 clamp(84px,10vw,144px);
+  scroll-margin-top:100px;
+}
+.portal-home .personalapps__head,
+.portal-home .catalog-intro {
+  display:grid;
+  grid-template-columns:minmax(180px,3fr) minmax(0,9fr);
+  gap:clamp(24px,4vw,64px);
+  align-items:end;
+  margin-bottom:30px;
+}
+.portal-home .personalapps__head h2,
+.portal-home .catalog-intro h2 {
+  margin:8px 0 0;
+  font-size:clamp(34px,5vw,64px);
+  line-height:.95;
+  letter-spacing:-.05em;
+  font-weight:780;
+}
+.portal-home .personalapps__head > p,
+.portal-home .catalog-intro__copy > p {
+  max-width:640px;
+  margin:0;
+  color:var(--ink-2);
+  font-size:15px;
+}
+.portal-home .personalapps__stage {
+  display:grid;
+  grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);
+  gap:18px;
+}
+.portal-home .quicksec {
+  min-width:0;
+  margin:0;
+  padding:22px;
+  border:2px solid var(--portal-rule-heavy);
+  border-radius:0;
+  background:var(--surface);
+  box-shadow:var(--portal-shadow);
+}
+.portal-home .quicksec__title { margin:0 0 18px; }
+.portal-home .quicksec__title .nm {
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.12em;
+}
+.portal-home .quicksec__hint { max-width:38ch;line-height:1.55; }
+.portal-home .quickgrid { grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--portal-rule);padding:1px; }
+.portal-home .quickgrid--continue { display:block;padding:0;background:transparent; }
+.portal-home .quickgrid--continue > .quicksec__hint { min-height:132px;margin:0;padding:24px;border:1px dashed var(--portal-rule); }
+.portal-home .quicksec--continue { background:var(--surface-etched); }
+.portal-home .quicksec--continue .appwrap { min-height:180px; }
+.portal-home .quicksec--continue .app--continue {
+  display:grid;
+  grid-template-columns:72px minmax(0,1fr);
+  grid-template-rows:auto auto;
+  align-content:end;
+  min-height:180px;
+  padding:28px 52px 28px 28px;
+  background:var(--surface);
+}
+.portal-home .app--continue .app__icon { grid-row:1/3;width:64px;height:64px; }
+.portal-home .app--continue .app__icon svg { width:30px;height:30px; }
+.portal-home .app--continue .app__name { font-size:clamp(24px,3vw,38px);letter-spacing:-.04em; }
+.portal-home .app--continue .app__desc { display:block;font-size:13px;white-space:normal; }
+
+.portal-home .catalog-intro {
+  margin-bottom:40px;
+  padding-top:34px;
+  border-top:2px solid var(--portal-rule-heavy);
+  scroll-margin-top:100px;
+}
+.portal-home .catalog-intro__copy { display:grid;gap:20px; }
+.portal-home .catalog-intro h2 { font-size:clamp(46px,7vw,92px); }
+.portal-home .catalog-nav {
+  position:sticky;
+  z-index:30;
+  top:72px;
+  display:flex;
+  gap:0;
+  margin:0 0 18px;
+  overflow-x:auto;
+  border-block:1px solid var(--portal-rule);
+  background:color-mix(in srgb,var(--bg) 96%,transparent);
+  scrollbar-width:thin;
+}
+.portal-home .catalog-nav .nav__item {
+  flex:0 0 auto;
+  min-height:46px;
+  margin:0;
+  padding:0 15px;
+  border:0;
+  border-right:1px solid var(--border);
+  border-radius:0;
+  color:var(--ink-2);
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.portal-home .catalog-nav .nav__dot { display:none; }
+.portal-home .catalog-nav .nav__count { margin-left:4px;border-radius:0;background:transparent;padding:0; }
+.portal-home .catalog-nav .nav__item::before { display:none; }
+.portal-home .catalog-nav .nav__item.is-active,
+.portal-home .catalog-nav .nav__item[aria-current="location"] {
+  color:var(--surface);
+  background:var(--ink);
+  box-shadow:none;
+}
+.portal-home .catalog-nav .nav__item.is-active .nav__count { color:inherit;background:transparent; }
+
+.portal-home .appsec { margin:0;scroll-margin-top:132px; }
+.portal-home .appsec__head { align-self:start; }
+.portal-home .appsec__head .ody-index { display:block;margin-bottom:18px; }
+.portal-home .appsec__head h2 {
+  max-width:10ch;
+  font-size:clamp(28px,3.4vw,46px);
+  line-height:.95;
+  letter-spacing:-.04em;
+  font-weight:760;
+}
+.portal-home .appsec__head p {
+  margin:14px 0 0;
+  color:var(--ink-3);
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.portal-home .appgrid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:1px;
+  padding:1px;
+  background:var(--portal-rule);
+}
+.portal-home .appwrap { min-width:0;background:var(--surface); }
+.portal-home .app {
+  display:grid;
+  grid-template-columns:52px minmax(0,1fr);
+  grid-template-rows:auto auto;
+  gap:3px 16px;
+  align-content:center;
+  min-height:124px;
+  padding:22px 48px 22px 20px;
+  border:0;
+  border-radius:0;
+  background:var(--surface);
+  box-shadow:none;
+}
+.portal-home .app:hover {
+  border:0;
+  outline:2px solid var(--c1,var(--accent));
+  box-shadow:5px 5px 0 color-mix(in srgb,var(--c1,var(--accent)) 34%,transparent);
+}
+.portal-home .app:focus-visible { border:0;outline:4px solid var(--ring);outline-offset:-4px;box-shadow:none; }
+.portal-home .app__icon {
+  width:52px;
+  height:52px;
+  border:1px solid color-mix(in srgb,var(--c1,var(--cat-more)) 38%,var(--border));
+  border-radius:0;
+  color:var(--c1,var(--cat-more));
+  background:color-mix(in srgb,var(--c1,var(--cat-more)) 10%,var(--surface));
+}
+.portal-home .app__icon svg { width:24px;height:24px; }
+.portal-home .app__name { font-size:15px;font-weight:720;white-space:normal; }
+.portal-home .app__desc {
+  display:-webkit-box;
+  overflow:hidden;
+  color:var(--ink-3);
+  line-height:1.45;
+  white-space:normal;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+.portal-home .app__pin {
+  top:10px;
+  right:10px;
+  width:34px;
+  height:34px;
+  border-radius:0;
+}
+.portal-home .app__soon { border-radius:0; }
+.portal-home .app__status { border-radius:0; }
+.portal-home .appwrap--compact .app__pin { top:8px;right:8px; }
+.portal-home .app--compact {
+  min-height:108px;
+  padding:18px 42px 18px 14px;
+  border-radius:0;
+  background:var(--surface);
+  box-shadow:none;
+}
+.portal-home .app--compact .app__icon { width:44px;height:44px;border-radius:0; }
+.portal-home .app--compact .app__name { font-size:13px; }
+
+.portal-home .internal-zone {
+  margin:64px 0 0;
+  padding:clamp(22px,3vw,38px);
+  background:var(--surface-etched);
+  scroll-margin-top:130px;
+}
+.portal-home .internal-zone__head {
+  display:grid;
+  grid-template-columns:minmax(180px,3fr) minmax(0,6fr) minmax(180px,3fr);
+  gap:24px;
+  align-items:end;
+  padding:0 0 32px;
+}
+.portal-home .internal-zone__head h2 { font-size:clamp(34px,4vw,58px);letter-spacing:-.045em; }
+.portal-home .internal-zone__head p:last-child { margin:0;color:var(--ink-3);font-family:var(--mono);font-size:10.5px;text-transform:uppercase; }
+.portal-home .internal-zone .appsec:last-child { padding-bottom:0; }
+
+.portal-home .noresults { border-top:2px solid var(--portal-rule-heavy);padding:56px 0;font-size:18px; }
+.portal-home .portal-foot {
+  max-width:none;
+  margin-top:clamp(80px,10vw,150px);
+  padding-inline:0;
+  border-top:2px solid var(--portal-rule-heavy);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:.1em;
+}
+
+.portal-home .palette__panel { border:2px solid var(--portal-rule-heavy);border-radius:0;box-shadow:var(--portal-shadow); }
+.portal-home .palette__input,
+.portal-home .palette__item { border-radius:0; }
+.portal-home .palette__item .app__icon { border-radius:0; }
+
+@keyframes portal-rise {
+  from { opacity:0;transform:translateY(-6px); }
+  to { opacity:1;transform:translateY(0); }
+}
+
+@media (max-width:1100px) {
+  .portal-home .estate-rail { grid-template-columns:auto auto 1fr auto; }
+  .portal-home .estate-rail__scope { display:none; }
+  .portal-home .estate-observe { grid-template-columns:1fr; }
+  .portal-home .personalapps__head,
+  .portal-home .catalog-intro { grid-template-columns:1fr;align-items:start; }
+  .portal-home .personalapps__stage { grid-template-columns:1fr; }
+  .portal-home .quickgrid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .portal-home .appgrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .portal-home .internal-zone__head { grid-template-columns:1fr; }
+}
+
+@media (max-width:760px) {
+  .portal-home .portalbar { min-height:64px;padding-inline:16px; }
+  .portal-home .portalbar__wordmark span,
+  .portal-home .portalbar .healthchip,
+  .portal-home .portalbar__user .usermenu__name,
+  .portal-home .portalbar__user .usermenu__caret { display:none; }
+  .portal-home .portalbar__actions { gap:4px; }
+  .portal-home .portalbar__user .usermenu__btn { width:40px;padding:5px; }
+  .portal-home .portalbar__user .usermenu__pop { position:fixed;top:70px;right:12px;left:12px;width:auto; }
+  .portal-home .portal-hero { min-height:auto; }
+  .portal-home .portal-hero .portal-canvas { padding-block:52px 62px; }
+  .portal-home .portal-hero__coordinate { margin-bottom:48px; }
+  .portal-home .portal-hero__coordinate > span:last-child { display:none; }
+  .portal-home .portal-hero h1 { font-size:clamp(48px,15vw,66px); }
+  .portal-home .portal-hero__line { font-size:18px; }
+  .portal-home .portal-hero__telemetry { line-height:1.6; }
+  .portal-home .search { margin-top:40px; }
+  .portal-home .estate-live { margin-bottom:72px; }
+  .portal-home .estate-rail { grid-template-columns:auto 1fr auto;gap:8px 14px; }
+  .portal-home .estate-rail h2 { display:none; }
+  .portal-home .estate-rail__actions { grid-column:1/-1;justify-content:flex-start; }
+  .portal-home .estate-detail > summary > span:last-child { display:none; }
+  .portal-home .estate-planes { grid-template-columns:1fr; }
+  .portal-home .estate-health .metrics { grid-template-columns:1fr 1fr; }
+  .portal-home .personalapps { margin-bottom:92px; }
+  .portal-home .personalapps__head h2 { font-size:44px; }
+  .portal-home .personalapps__head > p { font-size:13px; }
+  .portal-home .quicksec { padding:16px;box-shadow:4px 4px 0 color-mix(in srgb,var(--ink) 16%,transparent); }
+  .portal-home .quickgrid { grid-template-columns:1fr; }
+  .portal-home .quicksec--continue .app--continue { grid-template-columns:56px minmax(0,1fr);min-height:150px;padding:22px 46px 22px 18px; }
+  .portal-home .app--continue .app__icon { width:50px;height:50px; }
+  .portal-home .catalog-intro h2 { font-size:clamp(48px,14vw,68px); }
+  .portal-home .catalog-nav { top:64px;margin-inline:calc(var(--canvas-gutter) * -1);padding-inline:var(--canvas-gutter); }
+  .portal-home .appgrid { grid-template-columns:1fr; }
+  .portal-home .appsec { scroll-margin-top:120px; }
+  .portal-home .appsec__head { display:grid;grid-template-columns:auto 1fr;gap:10px 16px; }
+  .portal-home .appsec__head .ody-index { grid-row:1/3;margin:3px 0 0; }
+  .portal-home .appsec__head h2 { max-width:none;font-size:31px; }
+  .portal-home .appsec__head p { margin:0; }
+  .portal-home .app { min-height:112px;padding:18px 46px 18px 16px; }
+  .portal-home .internal-zone { margin-inline:calc(var(--canvas-gutter) * -1);border-inline:0;box-shadow:none; }
+  .portal-home .portal-foot { align-items:flex-start;flex-direction:column; }
+}
+
+@media (max-width:430px) {
+  .portal-home .portalbar__notify { display:none; }
+  .portal-home .estate-health .metrics { grid-template-columns:1fr; }
+  .portal-home .app { grid-template-columns:48px minmax(0,1fr);gap:2px 13px; }
+  .portal-home .app__icon { width:48px;height:48px; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .portal-home .estate-detail__body { animation:none; }
+}
+
+@media (forced-colors:active) {
+  .portal-home .portalbar,
+  .portal-home .quicksec,
+  .portal-home .appgrid,
+  .portal-home .app,
+  .portal-home .internal-zone { border-color:CanvasText;box-shadow:none; }
+}
