@@ -1088,4 +1088,215 @@ body.palette-open { overflow:hidden; }
   .portal-home .appgrid,
   .portal-home .app,
   .portal-home .internal-zone { border-color:CanvasText;box-shadow:none; }
+  .portal-home .catalog-nav .nav__item[aria-current="location"] { outline:2px solid Highlight; }
+  .portal-home .estate-rail,
+  .portal-home .ody-instrument { border-color:CanvasText; }
+  .portal-ops .ops-workbench { border-color:CanvasText; }
+}
+
+/* Portal Ops — Ledger workbench */
+.portal-ops {
+  --ops-rule:var(--structure-rule);
+  --ops-rule-heavy:var(--structure-rule-heavy);
+}
+
+.portal-ops .skiplink {
+  position:fixed;
+  z-index:120;
+  inset:10px auto auto 10px;
+  padding:10px 14px;
+  color:var(--surface);
+  background:var(--ink);
+  border-radius:4px;
+  font-size:13px;
+  font-weight:500;
+  text-decoration:none;
+  transform:translateY(-160%);
+  transition:transform 0.2s;
+}
+.portal-ops .skiplink:focus {
+  transform:translateY(0);
+  outline:2px solid var(--ink);
+  outline-offset:2px;
+}
+
+.ops-workbench {
+  padding:20px 0 16px;
+  border-bottom:2px solid var(--ops-rule);
+  margin-bottom:32px;
+}
+
+.ops-workbench__coordinate {
+  display:flex;
+  gap:20px;
+  margin-bottom:12px;
+}
+
+.ops-workbench__coordinate .ody-coordinate {
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+}
+
+.ops-workbench__title h1 {
+  margin:0 0 6px;
+  font-size:28px;
+  font-weight:600;
+  line-height:1.2;
+  color:var(--ink);
+}
+
+.ops-workbench__lede {
+  margin:0;
+  font-size:13.5px;
+  color:var(--ink-3);
+}
+
+/* Instrument strip */
+.ody-instrument {
+  display:flex;
+  gap:1px;
+  padding:12px 0;
+  border-top:2px solid var(--structure-rule-heavy);
+  border-bottom:2px solid var(--structure-rule-heavy);
+  margin:20px 0;
+  background:var(--structure-rule);
+}
+
+.ody-instrument__cell {
+  flex:1;
+  min-width:0;
+  padding:8px 12px;
+  background:var(--surface);
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.ody-instrument__label {
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+}
+
+.ody-instrument__value {
+  font-size:20px;
+  font-weight:600;
+  font-variant-numeric:tabular-nums;
+  line-height:1.1;
+  color:var(--ink);
+}
+
+.ody-instrument__unit {
+  font-size:14px;
+  font-weight:500;
+  color:var(--ink-3);
+  margin-left:2px;
+}
+
+.ody-instrument__cell[data-ody-status="operational"] .ody-instrument__value {
+  color:var(--ok-ink);
+}
+
+.ody-instrument__cell[data-ody-status="degraded"] .ody-instrument__value {
+  color:var(--warn-ink);
+}
+
+.ody-instrument__cell[data-ody-status="outage"] .ody-instrument__value,
+.ody-instrument__cell[data-ody-status="down"] .ody-instrument__value {
+  color:var(--down-ink);
+}
+
+/* Folio marginalia rhythm */
+.portal-home .ody-folio {
+  border-left:2px solid var(--portal-rule);
+  padding-left:16px;
+  margin-left:8px;
+}
+
+/* Narrow width handling */
+@media (max-width:760px) {
+  .portal-home .ody-instrument {
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .portal-home .ody-instrument__cell {
+    flex:1 1 calc(50% - 4px);
+    min-width:120px;
+  }
+  .ops-workbench {
+    padding:16px 0 12px;
+  }
+  .ops-workbench__coordinate {
+    flex-direction:column;
+    gap:6px;
+    margin-bottom:10px;
+  }
+  .ops-workbench__title h1 {
+    font-size:24px;
+  }
+}
+
+@media (max-width:340px) {
+  .portal-ops .topbar__title {
+    font-size:13px;
+  }
+  .portal-ops .topbar__title strong {
+    display:block;
+    margin-bottom:2px;
+  }
+  .ops-workbench {
+    padding:12px 0 10px;
+  }
+  .ops-workbench__coordinate {
+    gap:4px;
+    margin-bottom:8px;
+  }
+  .ops-workbench__coordinate .ody-coordinate {
+    font-size:10px;
+  }
+  .ops-workbench__title h1 {
+    font-size:20px;
+    margin-bottom:4px;
+  }
+  .ops-workbench__lede {
+    font-size:12px;
+  }
+  .portal-ops .sys__head h2 {
+    font-size:18px;
+  }
+  .portal-ops .ops-table {
+    font-size:12px;
+  }
+  .portal-ops .ops-table th,
+  .portal-ops .ops-table td {
+    padding:8px 6px;
+  }
+  .portal-ops .ops-filters {
+    gap:8px;
+  }
+  .portal-ops .ops-input,
+  .portal-ops .ops-select {
+    font-size:13px;
+    padding:6px 8px;
+  }
+  .portal-home .ody-instrument {
+    flex-direction:column;
+    gap:1px;
+  }
+  .portal-home .ody-instrument__cell {
+    flex:none;
+    padding:8px 10px;
+  }
+  .portal-home .ody-instrument__value {
+    font-size:18px;
+  }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .portal-ops .skiplink { transition:none; }
 }

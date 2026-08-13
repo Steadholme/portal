@@ -483,6 +483,45 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
         html.contains(r#"data-public-surface-count="22""#),
         "public count comes from Config catalog"
     );
+
+    // Instrument strip in estate-live fragment.
+    assert!(
+        html.contains(r#"<div class="ody-instrument">"#),
+        "instrument strip rendered"
+    );
+    assert!(
+        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="unknown">"#),
+        "verify cell reports unknown while Watchtower is unreachable"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__value">—</span>"#),
+        "unknown state shows em dash"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__label">Verify</span>"#),
+        "verify label present"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__label">CPU</span>"#),
+        "CPU label present"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__label">Memory</span>"#),
+        "memory label present"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__label">Load</span>"#),
+        "load label present"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__label">Events</span>"#),
+        "events label present"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__unit">%</span>"#),
+        "percentage unit present"
+    );
+
     assert!(html.contains("Anonymous, read-only"));
     assert!(html.contains(
         "status.w33d.xyz</a> stays publicly readable; no Portal identity or WireGuard connection is required."
@@ -502,6 +541,80 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
     assert!(!html.contains(r##"data-wire-target="#appsections""##));
     assert!(
         !html.contains(r#"<form class="search" role="search" method="get" action="/" data-wire"#)
+    );
+}
+
+/// The verify instrument cell maps Watchtower outcomes truthfully: unreachable is "unknown",
+/// verified is "operational", and reached-but-broken is an integrity failure — "down", never
+/// "degraded". Assertions match the full cell markup (not the bare attribute) because the
+/// embedded stylesheet itself contains `data-ody-status="..."` selector text.
+#[tokio::test]
+async fn verify_status_branches_cover_unknown_operational_down() {
+    // Unknown: Watchtower unreachable (verify.reached = false).
+    let state_unknown = state_with(
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+    );
+    let (status, html) = call(&state_unknown, get_as("/", "alice@steadholme.local")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="unknown">"#),
+        "unreachable Watchtower maps to unknown"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__value">—</span>"#),
+        "unknown state shows em dash"
+    );
+
+    // Operational: Watchtower reachable and chain verified (verify.ok = true).
+    let watchtower_ok = fake_service(&[
+        (
+            "/api/verify",
+            r#"{"ok":true,"count":42,"head_hash":"abc123"}"#,
+        ),
+        ("/api/events", r#"[]"#),
+    ])
+    .await;
+    let state_ok = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower_ok);
+    let (status, html) = call(&state_ok, get_as("/", "alice@steadholme.local")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="operational">"#),
+        "verified chain maps to operational"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__value">42</span>"#),
+        "operational state shows the chain count"
+    );
+
+    // Down: Watchtower reachable but chain broken (verify.ok = false).
+    let watchtower_broken = fake_service(&[
+        (
+            "/api/verify",
+            r#"{"ok":false,"count":99,"head_hash":"deadbeef","first_broken_seq":77}"#,
+        ),
+        ("/api/events", r#"[]"#),
+    ])
+    .await;
+    let state_broken = state_with(
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+        &watchtower_broken,
+    );
+    let (status, html) = call(&state_broken, get_as("/", "alice@steadholme.local")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="down">"#),
+        "broken chain must map to down"
+    );
+    assert!(
+        !html.contains(r#"<div class="ody-instrument__cell" data-ody-status="degraded">"#),
+        "integrity failure is never softened to degraded"
+    );
+    assert!(
+        html.contains(r#"<span class="ody-instrument__value">99</span>"#),
+        "down state still shows the chain count"
     );
 }
 
@@ -755,6 +868,17 @@ async fn dashboard_wire_response_is_exact_read_only_live_region() {
     assert!(fragment.contains(r#"data-wire="get""#));
     assert!(fragment.contains(r##"data-wire-target="#estate-live""##));
     assert!(fragment.contains(r#"data-spark-reltime"#) || fragment.contains("No recent activity"));
+
+    // Instrument strip in Wire fragment.
+    assert!(
+        fragment.contains(r#"<div class="ody-instrument">"#),
+        "instrument strip in Wire fragment"
+    );
+    assert!(
+        fragment.contains(r#"<span class="ody-instrument__label">Verify</span>"#),
+        "instrument labels in fragment"
+    );
+
     assert!(!fragment.contains("<!DOCTYPE html>"));
     assert!(!fragment.contains(r#"id="appsections""#));
     assert!(!fragment.contains("data-pin-button"));
@@ -1160,6 +1284,72 @@ async fn ops_console_renders_for_admin() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "admin group unlocks /ops");
+
+    // Profile and shell attributes.
+    assert!(
+        html.contains(r#"<html lang="en" data-ody-profile="portal">"#),
+        "ops.html has portal profile"
+    );
+    assert!(
+        html.contains(r#"<body class="portal-ops" data-ody-shell="1.3" data-density="compact">"#),
+        "ops.html has portal-ops class, 1.3 shell, and compact density"
+    );
+
+    // Skip link targeting the audit section, which accepts programmatic focus.
+    assert!(
+        html.contains(r##"class="skiplink" href="#audit""##),
+        "skip link targets audit section"
+    );
+    assert!(
+        html.contains(
+            r#"<section class="sys" id="audit" aria-label="Audit viewer" tabindex="-1">"#
+        ),
+        "audit section accepts programmatic focus"
+    );
+
+    // Landmarks: the content region is a real <main>, and the workbench is a plain div so
+    // the topbar stays the document's only <header> (single banner).
+    assert!(
+        html.contains(r#"<main class="content" id="top">"#),
+        "content region is a real main landmark"
+    );
+    assert_eq!(
+        html.matches("<header").count(),
+        1,
+        "exactly one header element remains"
+    );
+    assert!(
+        html.contains(r#"<header class="topbar">"#),
+        "the sole header is the topbar"
+    );
+
+    // Workbench block instead of dash-hero.
+    assert!(
+        html.contains(r#"<div class="ops-workbench">"#),
+        "ops workbench block rendered"
+    );
+    assert!(
+        !html.contains(r#"<header class="ops-workbench">"#),
+        "workbench no longer claims a banner header"
+    );
+    assert!(
+        html.contains("OPERATOR CONSOLE"),
+        "coordinate vocabulary present"
+    );
+    assert!(
+        !html.contains(r#"<div class="dash-hero">"#),
+        "dash-hero removed"
+    );
+
+    // Reduced-motion guard in script.
+    assert!(
+        html.contains("function prefersReducedMotion()"),
+        "reduced-motion guard function present"
+    );
+    assert!(
+        html.contains("behavior: prefersReducedMotion() ? 'auto' : 'smooth'"),
+        "scrollIntoView uses reduced-motion check"
+    );
 
     // Audit viewer: verify summary + per-event rows (source/actor/action all present).
     assert!(

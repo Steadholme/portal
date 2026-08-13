@@ -356,6 +356,39 @@ fn render_estate_live(
         .map(|count| format!(r#" data-internal-surface-count="{count}""#))
         .unwrap_or_default();
     let detail_open = if overall == "degraded" { " open" } else { "" };
+
+    // Instrument strip data
+    let cpu_val = snap
+        .metrics
+        .cpu_pct
+        .map(|v| format!("{:.1}", v))
+        .unwrap_or_else(|| "—".to_string());
+    let mem_val = snap
+        .metrics
+        .mem_pct
+        .map(|v| format!("{:.1}", v))
+        .unwrap_or_else(|| "—".to_string());
+    let load_val = snap
+        .metrics
+        .load1
+        .map(|v| format!("{:.2}", v))
+        .unwrap_or_else(|| "—".to_string());
+    // Reached-but-broken is an integrity failure, not a degradation: map it to "down" so the
+    // instrument cell agrees with `audit_foot()`'s "⚠ Integrity broken" severity.
+    let verify_status = if !snap.verify.reached {
+        "unknown"
+    } else if snap.verify.ok {
+        "operational"
+    } else {
+        "down"
+    };
+    let verify_label = if snap.verify.reached {
+        snap.verify.count.to_string()
+    } else {
+        "—".to_string()
+    };
+    let event_count = snap.events.len();
+
     format!(
         r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title" data-state="{overall}" data-up="{up}" data-total="{total}" data-access-scope="{access_scope}" data-public-surface-count="{public_surface_count}"{internal_count_attr}>
 {incident}
@@ -365,6 +398,28 @@ fn render_estate_live(
   {signal}
   <span class="estate-rail__scope">{access_label}</span>
   <span class="estate-rail__actions"><a href="https://status.w33d.xyz">Open status</a>{refresh}</span>
+</div>
+<div class="ody-instrument">
+  <div class="ody-instrument__cell" data-ody-status="{verify_status}">
+    <span class="ody-instrument__label">Verify</span>
+    <span class="ody-instrument__value">{verify_label}</span>
+  </div>
+  <div class="ody-instrument__cell">
+    <span class="ody-instrument__label">CPU</span>
+    <span class="ody-instrument__value">{cpu_val}<span class="ody-instrument__unit">%</span></span>
+  </div>
+  <div class="ody-instrument__cell">
+    <span class="ody-instrument__label">Memory</span>
+    <span class="ody-instrument__value">{mem_val}<span class="ody-instrument__unit">%</span></span>
+  </div>
+  <div class="ody-instrument__cell">
+    <span class="ody-instrument__label">Load</span>
+    <span class="ody-instrument__value">{load_val}</span>
+  </div>
+  <div class="ody-instrument__cell">
+    <span class="ody-instrument__label">Events</span>
+    <span class="ody-instrument__value">{event_count}</span>
+  </div>
 </div>
 <details class="estate-detail"{detail_open}>
   <summary><span>Estate details</span><span>Access map · fleet health · sealed activity</span></summary>
@@ -414,6 +469,12 @@ fn render_estate_live(
         ),
         signal = fleet_signal(statuses),
         refresh = refresh,
+        verify_status = verify_status,
+        verify_label = verify_label,
+        cpu_val = cpu_val,
+        mem_val = mem_val,
+        load_val = load_val,
+        event_count = event_count,
         planes = render_access_planes(public_surface_count, internal_surface_count),
         metrics = render_metrics(snap, statuses),
         activity = render_activity(&snap.events, now_secs, internal_surface_count.is_some(),),
