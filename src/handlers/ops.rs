@@ -1,17 +1,20 @@
-//! The federated read-only OPERATOR CONSOLE: `GET /ops`.
+//! The admin-gated operator console: `GET /ops` — the sealed audit stream.
 //!
 //! ADMIN-GATED (see [`crate::auth::require_admin`] over `X-Auth-Groups` ∩ {admins, infra-admins}):
-//! an ordinary signed-in user gets a 403 and the public dashboard at `/` is untouched. The gateway
+//! an ordinary signed-in user gets a 403 and the public launcher at `/` is untouched. The gateway
 //! injects AND HMAC-signs the groups on the apex route, so the membership is trustworthy.
 //!
-//! It is a pure read-only VIEW over the same resilient backend snapshot the dashboard uses
+//! It is a pure read-only VIEW over the same resilient backend snapshot the launcher uses
 //! ([`crate::snapshot`]), plus a larger slice of the Watchtower audit stream:
-//! 1. a cross-service AUDIT viewer (Watchtower `/api/events` newest-first + `/api/verify`) with
-//!    SERVER-SIDE filters (source / actor / action substrings + a time range with 1h/24h/7d
-//!    presets and custom epoch bounds) as GET query params, prev/next pagination preserving the
-//!    filters, and a per-event `<details>` expander showing the full sealed metadata;
-//! 2. a per-service HEALTH table from Beacon `/api/status` components (name / status / uptime);
-//! 3. host metrics from Vitals.
+//! 1. a summary strip (chain length + verdict, fleet up/total, host gauges, matching events);
+//! 2. the cross-service AUDIT stream (Watchtower `/api/events` newest-first + `/api/verify`)
+//!    grouped by day, with SERVER-SIDE filters as GET query params (source / actor / action
+//!    substrings + a time range with 1h/24h/7d presets and custom epoch bounds), prev/next
+//!    pagination preserving the filters, and a per-event `<details>` record that the
+//!    client-side inspector mirrors;
+//! 3. host metrics from Vitals under the Host view.
+//!
+//! Service health is Beacon's surface, not Portal's — only the fleet up/total appears here.
 //!
 //! FILTER PUSH-DOWN: Watchtower's `/api/events` only supports `actor`/`action` as EXACT matches,
 //! `since`, and `q` — no `source` param and no upper time bound. So the handler pushes down only
@@ -27,10 +30,10 @@ use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};
 
 use crate::auth;
-use crate::beacon::{Component, Statuses};
+use crate::beacon::Statuses;
 use crate::handlers::{
-    app_css, esc, fmt_pct, name_from_email, rel_time, severity_dot_class, status_label,
-    status_pill, SHIELD_SVG,
+    esc, fmt_count, fmt_pct, name_from_email, pct_width, rel_time, severity_dot_class,
+    status_label, SHIELD_SVG,
 };
 use crate::snapshot::Snapshot;
 use crate::vitals::Metrics;
@@ -41,7 +44,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const OPS_HTML: &str = include_str!("../../templates/ops.html");
 
-/// How many audit events one page of the viewer shows.
+/// How many audit events one page of the stream shows.
 pub const PAGE_SIZE: usize = 25;
 
 /// `GET /ops` — the operator console. 403 for a non-admin; otherwise the read-only console
@@ -64,7 +67,7 @@ pub async fn ops(
     let now = now_secs();
     let (from_ms, to_ms) = query.window_ms(now);
 
-    // Reuse the resilient, concurrent, few-second-cached snapshot for health + metrics + verify;
+    // Reuse the resilient, concurrent, few-second-cached snapshot for fleet + metrics + verify;
     // pull a larger slice of the audit stream for the viewer. The lower time bound is pushed
     // down as Watchtower's native `?since=`; the remaining filters are applied here (see the
     // module docs — the API has no substring/source/`until` params). The local time checks are
@@ -87,11 +90,11 @@ fn now_secs() -> i64 {
 
 // --- Audit query parsing ---------------------------------------------------------------
 
-/// The audit viewer's GET query params, parsed LENIENTLY (a malformed value falls back to
+/// The audit stream's GET query params, parsed LENIENTLY (a malformed value falls back to
 /// its default — the console never 400s). `source`/`actor`/`action` are case-insensitive
 /// substring filters; `range` is one of `1h`/`24h`/`7d`/`custom` (empty = all time);
 /// `from`/`to` are the custom bounds in epoch SECONDS; `page` is 1-based.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AuditQuery {
     pub source: String,
     pub actor: String,
@@ -186,6 +189,33 @@ impl AuditQuery {
         parts.push(format!("page={page}"));
         parts.join("&")
     }
+
+    /// The query string with one filter cleared (page reset to 1) — the chip "Clear" links.
+    fn query_string_without(&self, key: &str) -> String {
+        let mut cleared = self.clone();
+        match key {
+            "source" => cleared.source.clear(),
+            "actor" => cleared.actor.clear(),
+            "action" => cleared.action.clear(),
+            "range" => {
+                cleared.range.clear();
+                cleared.from = None;
+                cleared.to = None;
+            }
+            _ => {}
+        }
+        cleared.query_string(1)
+    }
+
+    fn range_label(&self) -> Option<&'static str> {
+        match self.range.as_str() {
+            "1h" => Some("1h"),
+            "24h" => Some("24h"),
+            "7d" => Some("7d"),
+            "custom" => Some("custom"),
+            _ => None,
+        }
+    }
 }
 
 /// Case-insensitive substring match; an empty needle matches everything (filter unset).
@@ -265,11 +295,15 @@ fn render(
     let slice = &filtered[start.min(filtered.len())..(start + PAGE_SIZE).min(filtered.len())];
 
     OPS_HTML
-        .replace("{{CSS}}", app_css())
         .replace("{{SHIELD}}", SHIELD_SVG)
         .replace("{{INITIAL}}", &esc(&initial))
         .replace("{{NAME}}", &esc(&name))
         .replace("{{EMAIL}}", &esc(email))
+        .replace("{{CHAIN_STATE}}", chain_state(&snap.verify))
+        .replace(
+            "{{STRIP}}",
+            &render_strip(snap, &snap.operator_statuses, filtered.len()),
+        )
         .replace("{{METRICS}}", &render_metrics(&snap.metrics, &snap.verify))
         .replace(
             "{{AUDIT_SUMMARY}}",
@@ -281,48 +315,167 @@ fn render(
             "{{AUDIT_PAGER}}",
             &render_audit_pager(query, page, pages, filtered.len()),
         )
-        .replace(
-            "{{HEALTH_ROWS}}",
-            &render_health_rows(&snap.operator_statuses),
-        )
+}
+
+/// Chain verdict token: `ok`, `bad` (reached but broken) or `unknown` (Watchtower down).
+fn chain_state(verify: &Verify) -> &'static str {
+    if !verify.reached {
+        "unknown"
+    } else if verify.ok {
+        "ok"
+    } else {
+        "bad"
+    }
+}
+
+// --- Summary strip ---------------------------------------------------------------------
+
+/// The instrument strip: chain, fleet, CPU, memory, load, matching events. Every cell is a
+/// label + value; an unreachable backend renders "—".
+fn render_strip(snap: &Snapshot, statuses: &Statuses, matching: usize) -> String {
+    let verify = &snap.verify;
+    let (chain_value, chain_unit, chain_tone) = if !verify.reached {
+        ("—".to_string(), "", "unknown")
+    } else if verify.ok {
+        (fmt_count(verify.count), "sealed", "operational")
+    } else {
+        (fmt_count(verify.count), "broken", "down")
+    };
+    let (fleet_value, fleet_unit, fleet_tone) = if statuses.reached && statuses.total > 0 {
+        let troubled: Vec<_> = statuses
+            .components
+            .iter()
+            .filter(|c| c.status != "operational")
+            .collect();
+        let unit = match troubled.first() {
+            None => "up".to_string(),
+            Some(first) => {
+                let mut unit = format!(
+                    "{} {}",
+                    esc(&first.name),
+                    status_label(&first.status).to_lowercase()
+                );
+                if troubled.len() > 1 {
+                    unit.push_str(&format!(" +{}", troubled.len() - 1));
+                }
+                unit
+            }
+        };
+        let tone = if troubled.is_empty() {
+            "operational"
+        } else if troubled.iter().any(|c| c.status == "down") {
+            "down"
+        } else {
+            "degraded"
+        };
+        (format!("{}/{}", statuses.up, statuses.total), unit, tone)
+    } else {
+        ("—".to_string(), String::new(), "unknown")
+    };
+    let load = snap
+        .metrics
+        .load1
+        .map(|v| format!("{v:.2}"))
+        .unwrap_or_else(|| "—".to_string());
+    [
+        cell("Chain", &chain_value, chain_unit, chain_tone),
+        cell("Fleet", &fleet_value, &fleet_unit, fleet_tone),
+        cell(
+            "CPU",
+            &fmt_pct(snap.metrics.cpu_pct),
+            "",
+            gauge_tone(snap.metrics.cpu_pct),
+        ),
+        cell(
+            "Memory",
+            &fmt_pct(snap.metrics.mem_pct),
+            "",
+            gauge_tone(snap.metrics.mem_pct),
+        ),
+        cell("Load", &load, "", "neutral"),
+        cell("Events", &fmt_count(matching), "matching", "neutral"),
+    ]
+    .concat()
+}
+
+fn cell(label: &str, value: &str, unit: &str, tone: &str) -> String {
+    let unit_html = if unit.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<span class="cell__unit">{unit}</span>"#)
+    };
+    format!(
+        r#"<div class="cell" data-state="{tone}"><span class="cell__label">{label}</span><span class="cell__value">{value}{unit}</span></div>"#,
+        tone = tone,
+        label = esc(label),
+        value = esc(value),
+        unit = unit_html,
+    )
+}
+
+fn gauge_tone(value: Option<f64>) -> &'static str {
+    match value {
+        Some(v) if v >= 90.0 => "down",
+        Some(v) if v >= 75.0 => "degraded",
+        Some(_) => "neutral",
+        None => "unknown",
+    }
 }
 
 // --- Host metric tiles -----------------------------------------------------------------
 
-/// Compact host-metric tiles (CPU / memory / load) + the audit-chain count, reusing the shared
-/// `.metric` card styling. Unreachable Vitals/Watchtower render "—".
+/// Host tiles (CPU / memory / load) + the audit-chain count. Unreachable Vitals/Watchtower
+/// render "—".
 fn render_metrics(m: &Metrics, verify: &Verify) -> String {
     let load = m
         .load1
         .map(|v| format!("{v:.2}"))
         .unwrap_or_else(|| "—".to_string());
     let audit = if verify.reached {
-        verify.count.to_string()
+        fmt_count(verify.count)
     } else {
         "—".to_string()
     };
-    let mut out = String::new();
-    out.push_str(&metric_tile("Host CPU", &fmt_pct(m.cpu_pct)));
-    out.push_str(&metric_tile("Host memory", &fmt_pct(m.mem_pct)));
-    out.push_str(&metric_tile("Load · 1m", &load));
-    out.push_str(&metric_tile("Audit events", &audit));
-    out
+    [
+        metric_tile(
+            "Host CPU",
+            &fmt_pct(m.cpu_pct),
+            m.cpu_pct.map(|v| pct_width(Some(v))),
+            gauge_tone(m.cpu_pct),
+        ),
+        metric_tile(
+            "Host memory",
+            &fmt_pct(m.mem_pct),
+            m.mem_pct.map(|v| pct_width(Some(v))),
+            gauge_tone(m.mem_pct),
+        ),
+        metric_tile("Load · 1m", &load, None, "neutral"),
+        metric_tile("Audit events", &audit, None, chain_state(verify)),
+    ]
+    .concat()
 }
 
-fn metric_tile(label: &str, value: &str) -> String {
+fn metric_tile(label: &str, value: &str, bar: Option<f64>, tone: &str) -> String {
+    let bar_html = match bar {
+        Some(w) => format!(r#"<div class="metric__bar"><span style="width:{w:.0}%"></span></div>"#),
+        None => String::new(),
+    };
     format!(
-        r#"<div class="metric"><div class="metric__top"><span class="metric__label">{label}</span></div><div class="metric__value">{value}</div></div>"#,
+        r#"<div class="metric" data-state="{tone}"><div class="metric__top"><span class="metric__label">{label}</span></div><div class="metric__value">{value}</div>{bar}</div>"#,
+        tone = tone,
         label = esc(label),
         value = esc(value),
+        bar = bar_html,
     )
 }
 
-// --- Audit viewer ----------------------------------------------------------------------
+// --- Audit stream ----------------------------------------------------------------------
 
-/// The audit header chip: chain length, integrity, and how many events match the filters.
+/// The audit summary: chain length, integrity verdict, how many events match the filters,
+/// and the head hash.
 fn audit_summary(verify: &Verify, loaded: usize) -> String {
     if !verify.reached {
-        return r#"<span class="ops-chip"><span class="dot"></span>Watchtower unreachable</span>"#
+        return r#"<span class="ops-chip"><span class="dot"></span>Watchtower —</span>"#
             .to_string();
     }
     let (cls, word) = if verify.ok {
@@ -335,7 +488,7 @@ fn audit_summary(verify: &Verify, loaded: usize) -> String {
     } else {
         let short: String = verify.head_hash.chars().take(12).collect();
         format!(
-            r#" <span class="ops-chip__hash" title="{full}">head {short}</span>"#,
+            r#" <span class="hash" title="{full}">head {short}</span>"#,
             full = esc(&verify.head_hash),
             short = esc(&short),
         )
@@ -343,25 +496,34 @@ fn audit_summary(verify: &Verify, loaded: usize) -> String {
     format!(
         r#"<span class="ops-chip {cls}"><span class="dot"></span>{count} sealed · {word} · showing {loaded}</span>{head}"#,
         cls = cls,
-        count = verify.count,
+        count = fmt_count(verify.count),
         word = word,
-        loaded = loaded,
+        loaded = fmt_count(loaded),
         head = head,
     )
 }
 
-/// The filter bar: a GET form over the audit section's query params, echoing the current
-/// values (escaped) so a submitted filter stays visible. Submitting resets to page 1 (the
-/// form simply carries no `page` field).
+/// The filter controls: an action search plus Source / Actor / Range chips. Each chip is a
+/// native `<details>` popover holding its input, so the GET form works without JavaScript;
+/// an active chip shows its value and a Clear link. Values are echoed escaped.
 fn render_audit_filters(q: &AuditQuery) -> String {
     let sel = |v: &str| if q.range == v { " selected" } else { "" };
     let from = q.from.map(|v| v.to_string()).unwrap_or_default();
     let to = q.to.map(|v| v.to_string()).unwrap_or_default();
+    let range_active = q.range_label().is_some();
+    let range_clear = if range_active {
+        format!(
+            r##"<a href="/ops?{qs}#audit">Clear</a>"##,
+            qs = esc(&q.query_string_without("range"))
+        )
+    } else {
+        String::new()
+    };
     format!(
-        r#"<form class="ops-filters" method="get" action="/ops#audit">
-  <input class="ops-input" type="search" name="source" value="{source}" placeholder="Service / source contains…" autocomplete="off" aria-label="Filter by service or source">
-  <input class="ops-input" type="search" name="actor" value="{actor}" placeholder="Actor contains…" autocomplete="off" aria-label="Filter by actor">
-  <input class="ops-input" type="search" name="action" value="{action}" placeholder="Action contains…" autocomplete="off" aria-label="Filter by action">
+        r#"<input class="filters__search" type="search" name="action" value="{action}" placeholder="Action" autocomplete="off" aria-label="Filter by action">
+{source}
+{actor}
+<details class="fchip{range_class}"><summary><span class="fchip__label">Range</span>{range_value}{chevron}</summary><div class="fchip__pop">
   <select class="ops-select" name="range" aria-label="Time range">
     <option value="">All time</option>
     <option value="1h"{s1}>Last hour</option>
@@ -369,65 +531,131 @@ fn render_audit_filters(q: &AuditQuery) -> String {
     <option value="7d"{s7}>Last 7 days</option>
     <option value="custom"{sc}>Custom range</option>
   </select>
-  <input class="ops-input ops-input--epoch" name="from" value="{from}" inputmode="numeric" placeholder="From · epoch s" aria-label="Custom range start (epoch seconds)">
-  <input class="ops-input ops-input--epoch" name="to" value="{to}" inputmode="numeric" placeholder="To · epoch s" aria-label="Custom range end (epoch seconds)">
-  <button class="loadmore" type="submit">Apply</button>
-</form>"#,
-        source = esc(&q.source),
-        actor = esc(&q.actor),
+  <div class="fchip__row"><input class="ops-input" name="from" value="{from}" inputmode="numeric" placeholder="From · epoch s" aria-label="Custom range start (epoch seconds)"><input class="ops-input" name="to" value="{to}" inputmode="numeric" placeholder="To · epoch s" aria-label="Custom range end (epoch seconds)"></div>
+  <div class="fchip__row"><button class="btn btn-secondary btn-sm" type="submit">Apply</button>{range_clear}</div>
+</div></details>"#,
         action = esc(&q.action),
+        source = filter_chip("Source", "source", &q.source, "Service / source", q),
+        actor = filter_chip("Actor", "actor", &q.actor, "Actor", q),
+        range_class = if range_active { " is-active" } else { "" },
+        range_value = q
+            .range_label()
+            .map(|label| format!(r#"<span class="fchip__value">· {label}</span>"#))
+            .unwrap_or_default(),
+        chevron = ICON_CHEVRON,
         s1 = sel("1h"),
         s24 = sel("24h"),
         s7 = sel("7d"),
         sc = sel("custom"),
         from = esc(&from),
         to = esc(&to),
+        range_clear = range_clear,
     )
 }
 
-/// One table row per audit event on the current page: the headline columns plus a
-/// `<details>` expander showing the FULL sealed metadata. Every field is escaped. Each row
-/// keeps a lowercased `data-sev` styling/inspection hook.
+fn filter_chip(label: &str, name: &str, value: &str, placeholder: &str, q: &AuditQuery) -> String {
+    let active = !value.is_empty();
+    let clear = if active {
+        format!(
+            r##"<a href="/ops?{qs}#audit">Clear</a>"##,
+            qs = esc(&q.query_string_without(name))
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        r#"<details class="fchip{cls}"><summary><span class="fchip__label">{label}</span>{shown}{chevron}</summary><div class="fchip__pop"><input class="ops-input" type="search" name="{name}" value="{value}" placeholder="{placeholder}" autocomplete="off" aria-label="Filter by {label}"><div class="fchip__row"><button class="btn btn-secondary btn-sm" type="submit">Apply</button>{clear}</div></div></details>"#,
+        cls = if active { " is-active" } else { "" },
+        label = esc(label),
+        shown = if active {
+            format!(r#"<span class="fchip__value">· {}</span>"#, esc(value))
+        } else {
+            String::new()
+        },
+        chevron = ICON_CHEVRON,
+        name = name,
+        value = esc(value),
+        placeholder = esc(placeholder),
+        clear = clear,
+    )
+}
+
+/// The stream: one row per audit event on the current page, grouped under a day label
+/// (Today / Yesterday / ISO date, UTC). Each row keeps a no-JS `<details>` record with the
+/// FULL sealed metadata; every field is escaped. Rows carry a lowercased `data-sev` hook.
 fn render_audit_rows(events: &[&Event], now_secs: i64) -> String {
     if events.is_empty() {
-        return r#"<tr class="ops-empty-row"><td colspan="7" class="ops-empty">No audit events to show.</td></tr>"#
-            .to_string();
+        return r#"<li class="ops-empty">No audit events to show.</li>"#.to_string();
     }
     let mut out = String::new();
+    let mut last_day: Option<String> = None;
     for ev in events {
+        let day = day_label(ev.ts / 1_000, now_secs);
+        if last_day.as_deref() != Some(day.as_str()) {
+            out.push_str(&format!(r#"<li class="au-day">{}</li>"#, esc(&day)));
+            last_day = Some(day);
+        }
         let source = non_empty(&ev.source, "—");
         let actor = non_empty(&ev.actor, "system");
         let action = non_empty(&ev.action, "event");
-        let target = non_empty(&ev.target, "—");
+        let target = non_empty(&ev.target, "");
         let severity = non_empty(&ev.severity, "info");
         let when = rel_time(ev.ts / 1_000, now_secs);
         out.push_str(&format!(
-            r#"<tr class="au-row" data-sev="{sev_key}">
-  <td class="au-when">{when}</td>
-  <td><span class="au-sev {sevdot}">{sev}</span></td>
-  <td class="au-src">{source}</td>
-  <td class="au-actor">{actor}</td>
-  <td class="au-action">{action}</td>
-  <td class="au-target">{target}</td>
-  <td class="au-more">{detail}</td>
-</tr>"#,
+            r#"<li class="au-row" data-sev="{sev_key}" data-seq="{seq}">
+  <span class="au-when" data-spark-reltime data-ts="{ts}">{when}</span>
+  <span class="au-rail {sevdot}" aria-hidden="true"></span>
+  <span class="au-main"><span class="au-action">{action}</span><span class="au-target">{target}</span></span>
+  <span class="au-src">{source}</span>
+  <span class="au-actor">{actor}</span>
+  {detail}
+</li>"#,
             sev_key = esc(&severity.to_lowercase()),
+            seq = ev.seq,
+            ts = ev.ts / 1_000,
             when = esc(&when),
             sevdot = severity_dot_class(&severity),
-            sev = esc(&severity),
-            source = esc(&source),
-            actor = esc(&actor),
             action = esc(&action),
             target = esc(&target),
+            source = esc(&source),
+            actor = esc(&actor),
             detail = render_event_detail(ev),
         ));
     }
     out
 }
 
-/// The per-event expandable detail: a plain `<details>/<summary>` (no JS) listing the full
-/// sealed metadata — sequence, raw timestamp, every content field, and both chain hashes.
-/// Everything is escaped; absent fields render "—".
+/// Day bucket for the stream, in UTC: "Today", "Yesterday", else the ISO date.
+fn day_label(ts_secs: i64, now_secs: i64) -> String {
+    let day = ts_secs.div_euclid(86_400);
+    let today = now_secs.div_euclid(86_400);
+    match today - day {
+        0 => "Today".to_string(),
+        1 => "Yesterday".to_string(),
+        _ => {
+            let (y, m, d) = civil_from_days(day);
+            format!("{y:04}-{m:02}-{d:02}")
+        }
+    }
+}
+
+/// Days since 1970-01-01 -> proleptic Gregorian (year, month, day). Howard Hinnant's algorithm.
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// The per-event record: a plain `<details>/<summary>` (no JS) listing the full sealed
+/// metadata — sequence, raw timestamp, every content field, and both chain hashes. The
+/// client-side inspector reads the same `<dl>`. Everything is escaped; absent fields render "—".
 fn render_event_detail(ev: &Event) -> String {
     let seq = if ev.seq > 0 {
         ev.seq.to_string()
@@ -459,7 +687,7 @@ fn render_event_detail(ev: &Event) -> String {
     )
 }
 
-/// The prev/next pager under the audit table. Links rebuild the current query string (every
+/// The prev/next pager under the stream. Links rebuild the current query string (every
 /// filter preserved, values percent-encoded) and are HTML-escaped for the attribute — so the
 /// `&` separators render as `&amp;`.
 fn render_audit_pager(q: &AuditQuery, page: usize, pages: usize, total: usize) -> String {
@@ -495,39 +723,7 @@ fn non_empty(s: &str, fallback: &str) -> String {
     }
 }
 
-// --- Per-service health table ----------------------------------------------------------
-
-/// One row per Beacon component (name / live status pill / 24h uptime). An unreachable/empty
-/// Beacon renders a single placeholder row.
-fn render_health_rows(statuses: &Statuses) -> String {
-    if !statuses.reached || statuses.components.is_empty() {
-        return r#"<tr><td colspan="3" class="ops-empty">Beacon has not reported component health yet.</td></tr>"#
-            .to_string();
-    }
-    let mut out = String::new();
-    for c in &statuses.components {
-        out.push_str(&health_row(c));
-    }
-    out
-}
-
-fn health_row(c: &Component) -> String {
-    let uptime = match c.uptime_24h {
-        Some(v) => format!("{:.2}%", v.clamp(0.0, 100.0)),
-        None => "—".to_string(),
-    };
-    format!(
-        r#"<tr>
-  <td class="au-src" title="{title}">{name}</td>
-  <td>{pill}</td>
-  <td class="au-when">{uptime}</td>
-</tr>"#,
-        title = esc(status_label(&c.status)),
-        name = esc(&c.name),
-        pill = status_pill(&c.status),
-        uptime = esc(&uptime),
-    )
-}
+const ICON_CHEVRON: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>"##;
 
 #[cfg(test)]
 mod tests {
@@ -649,6 +845,15 @@ mod tests {
         );
         // Unset filters are omitted entirely.
         assert_eq!(parse_query("").query_string(1), "page=1");
+        // Clearing one chip keeps the others and drops the custom bounds with the range.
+        assert_eq!(
+            q.query_string_without("source"),
+            "actor=x%20y&range=custom&from=1&to=2&page=1"
+        );
+        assert_eq!(
+            q.query_string_without("range"),
+            "source=a%26b&actor=x%20y&page=1"
+        );
     }
 
     #[test]
@@ -674,7 +879,7 @@ mod tests {
     }
 
     #[test]
-    fn filter_bar_echoes_values_escaped() {
+    fn filter_chips_echo_values_escaped_and_expose_clear_links() {
         let q = parse_query("source=%3Cb%3E&actor=o%27hara&range=7d");
         let html = render_audit_filters(&q);
         assert!(
@@ -689,7 +894,33 @@ mod tests {
             html.contains(r#"<option value="7d" selected>"#),
             "preset stays selected"
         );
+        assert!(
+            html.contains(r#"<details class="fchip is-active">"#),
+            "active chips are marked"
+        );
+        assert!(
+            html.contains(
+                r##"href="/ops?actor=o%27hara&amp;range=7d&amp;page=1#audit">Clear</a>"##
+            ),
+            "clearing source keeps actor + range: {html}"
+        );
         assert!(!html.contains("<b>"), "no raw user HTML in the form");
+    }
+
+    #[test]
+    fn stream_groups_rows_by_utc_day() {
+        let now = 1_700_000_000; // 2023-11-14T22:13:20Z
+        let today = event(1_699_990_000_000, "keystone", "alice", "login");
+        let yesterday = event(1_699_900_000_000, "relay", "bob", "key.revoke");
+        let older = event(1_699_000_000_000, "vault", "carol", "lease.revoke");
+        let html = render_audit_rows(&[&today, &yesterday, &older], now);
+        assert!(html.contains(r#"<li class="au-day">Today</li>"#));
+        assert!(html.contains(r#"<li class="au-day">Yesterday</li>"#));
+        assert!(html.contains(r#"<li class="au-day">2023-11-03</li>"#));
+        assert_eq!(html.matches(r#"class="au-row""#).count(), 3);
+        assert_eq!(day_label(0, 0), "Today");
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(19_723), (2024, 1, 1));
     }
 
     #[test]

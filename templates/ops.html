@@ -4,174 +4,218 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>w33d · Operator Console</title>
-  <style>{{CSS}}</style>
+  <title>Steadholme Ops</title>
+  <link rel="stylesheet" href="/assets/portal-20260907.css">
 </head>
 <body class="portal-ops" data-ody-shell="1.3" data-density="compact">
+  <script>document.body.classList.add('js');</script>
   <a class="skiplink" href="#audit">Skip to audit</a>
-  <div class="shell">
-    <aside class="sidebar" id="sidebar" aria-label="Primary">
-      <a class="sidebar__brand" href="/" aria-label="Steadholme home">
-        <span class="sidebar__shield" aria-hidden="true">{{SHIELD}}</span>
-        <span class="sidebar__wordmark"><b>w33d</b><span>OPERATOR</span></span>
+  <header class="top">
+    <div class="top__left">
+      <a class="top__brand" href="/" aria-label="Steadholme home">
+        <span class="top__mark" aria-hidden="true">{{SHIELD}}</span>
       </a>
-
-      <nav class="sidebar__nav">
-        <a class="nav__item" href="/">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m12 8-4 4 4 4M8 12h13"/></svg>
-          <span class="nav__text">Back to dashboard</span>
-        </a>
-
-        <p class="nav__label">Console</p>
-        <a class="nav__item is-active" href="#audit" data-spy="audit">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
-          <span class="nav__text">Audit</span>
-        </a>
-        <a class="nav__item" href="#health" data-spy="health">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>
-          <span class="nav__text">Service health</span>
-        </a>
-        <a class="nav__item" href="#hostmetrics" data-spy="hostmetrics">
-          <svg class="nav__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
-          <span class="nav__text">Host metrics</span>
-        </a>
+      <nav class="seg" aria-label="Views">
+        <a class="seg__tab is-active" href="#audit" data-view="audit" aria-current="page">Audit</a>
+        <a class="seg__tab" href="#host" data-view="host">Host</a>
       </nav>
-
-      <div class="usermenu sidebar__user" id="usermenu">
-        <button class="usermenu__btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">
+    </div>
+    <div class="top__actions">
+      <div class="usermenu" id="usermenu">
+        <button class="usermenu__btn" id="account-toggle" type="button" aria-expanded="false" aria-controls="account-popover" aria-label="Account links">
           <span class="avatar" aria-hidden="true">{{INITIAL}}</span>
-          <span class="sidebar__who">
-            <span class="sidebar__name">{{NAME}}</span>
-            <span class="sidebar__mail">{{EMAIL}}</span>
-          </span>
+          <span class="usermenu__name" data-user-name="{{NAME}}">{{NAME}}</span>
           <svg class="usermenu__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="usermenu__pop" role="menu" aria-label="Account">
+        <div class="usermenu__pop" id="account-popover" aria-label="Account" hidden>
           <div class="usermenu__head">
             <span class="avatar avatar--lg" aria-hidden="true">{{INITIAL}}</span>
             <span><b>{{NAME}}</b><span>{{EMAIL}}</span></span>
           </div>
-          <a class="menuitem" role="menuitem" href="https://account.w33d.xyz">
+          <a class="menuitem" href="https://account.w33d.xyz">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
             Account
           </a>
-          <a class="menuitem" role="menuitem" href="https://w33d.xyz">
+          <a class="menuitem" href="/">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-            All apps
+            All services
           </a>
-          <a class="menuitem menuitem--danger sidebar__out" role="menuitem" href="https://sso.w33d.xyz/_gw/auth/logout" title="Sign out" aria-label="Sign out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
+          <a class="menuitem menuitem--danger" href="https://sso.w33d.xyz/_gw/auth/logout" title="Sign out" aria-label="Sign out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg>
             Sign out
           </a>
         </div>
       </div>
-    </aside>
-
-    <div class="main">
-      <header class="topbar">
-        <button class="topbar__burger" id="burger" aria-label="Toggle menu" aria-expanded="false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </button>
-        <div class="topbar__title">
-          <strong>Operator Console</strong>
-          <span>Read-only · admin</span>
-        </div>
-      </header>
-
-      <main class="content" id="top">
-        <div class="ops-workbench">
-          <div class="ops-workbench__coordinate">
-            <span class="ody-coordinate">W33D / STEADHOLME</span>
-            <span class="ody-coordinate">OPERATOR CONSOLE</span>
-          </div>
-          <div class="ops-workbench__title">
-            <h1>Operator Console</h1>
-            <p class="ops-workbench__lede">Cross-service audit, live service health, and host metrics — read-only.</p>
-          </div>
-        </div>
-
-        <section class="sys" id="audit" aria-label="Audit viewer" tabindex="-1">
-          <div class="sys__head">
-            <h2>Cross-service audit</h2>
-            <span class="hint">{{AUDIT_SUMMARY}}</span>
-          </div>
-          {{AUDIT_FILTERS}}
-          <div class="ops-tablewrap">
-            <table class="ops-table" id="audittable">
-              <thead>
-                <tr><th>When</th><th>Severity</th><th>Source</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr>
-              </thead>
-              <tbody id="auditbody">
-                {{AUDIT_ROWS}}
-              </tbody>
-            </table>
-          </div>
-          <div class="ops-pager">{{AUDIT_PAGER}}</div>
-        </section>
-
-        <section class="sys" id="health" aria-label="Service health">
-          <div class="sys__head">
-            <h2>Service health</h2>
-            <span class="hint">Live from Beacon</span>
-          </div>
-          <div class="ops-tablewrap">
-            <table class="ops-table">
-              <thead>
-                <tr><th>Service</th><th>Status</th><th>Uptime · 24h</th></tr>
-              </thead>
-              <tbody>
-                {{HEALTH_ROWS}}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="sys" id="hostmetrics" aria-label="Host metrics">
-          <div class="sys__head">
-            <h2>Host metrics</h2>
-            <span class="hint">Live from Vitals · Watchtower</span>
-          </div>
-          <div class="metrics">{{METRICS}}</div>
-        </section>
-
-        <footer class="site-foot">
-          <span>Steadholme · Operator Console</span>
-          <span>Read-only federated view.</span>
-        </footer>
-      </main>
     </div>
-  </div>
-  <div class="scrim" id="scrim" hidden></div>
+  </header>
+
+  <main class="content" id="top">
+    <h1 class="sr-only">Steadholme Ops</h1>
+    <section class="strip" aria-label="Summary">{{STRIP}}</section>
+
+    <section class="stream" id="audit" aria-label="Audit" tabindex="-1" data-chain="{{CHAIN_STATE}}">
+      <div class="stream__bar">
+        <form class="filters" method="get" action="/ops#audit">{{AUDIT_FILTERS}}</form>
+        <div class="stream__summary">{{AUDIT_SUMMARY}}</div>
+      </div>
+      <div class="stream__body" id="streambody">
+        <ol class="events" id="auditbody">
+          {{AUDIT_ROWS}}
+        </ol>
+        <aside class="inspector" id="inspector" aria-label="Event" hidden>
+          <div class="inspector__head">
+            <span class="pill" id="insp-sev"></span>
+            <span class="inspector__when" id="insp-when"></span>
+            <span class="inspector__seq" id="insp-seq"></span>
+          </div>
+          <h2 class="inspector__action" id="insp-action"></h2>
+          <p class="inspector__target" id="insp-target"></p>
+          <dl class="inspector__fields" id="insp-fields"></dl>
+          <div class="chainviz" id="insp-chain">
+            <div class="chainviz__head"><h3>Chain</h3><span class="pill" id="insp-chain-state"></span></div>
+            <div class="chainviz__links">
+              <span class="hash" id="insp-prev"></span>
+              <span class="chainviz__link" aria-hidden="true"></span>
+              <span class="hash is-this" id="insp-hash"></span>
+            </div>
+            <div class="chainviz__legend"><span>prev</span><b>this event</b></div>
+          </div>
+          <div class="inspector__actions">
+            <a class="btn btn-secondary" id="insp-open" href="https://audit.w33d.xyz" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/></svg>
+              Open in Watchtower
+            </a>
+            <button class="btn btn-subtle" id="insp-copy" type="button">Copy hash</button>
+          </div>
+        </aside>
+      </div>
+      <div class="ops-pager">{{AUDIT_PAGER}}</div>
+    </section>
+
+    <section class="host" id="host" aria-label="Host" tabindex="-1">
+      <h2>Host</h2>
+      <div class="metrics">{{METRICS}}</div>
+    </section>
+  </main>
 
   <script>
   (function () {
-    var sidebar = document.getElementById('sidebar'),
-        burger = document.getElementById('burger'),
-        scrim = document.getElementById('scrim');
-    function setMenu(open) {
-      document.body.classList.toggle('nav-open', open);
-      scrim.hidden = !open;
-      if (burger) burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var userMenu = document.getElementById('usermenu'),
+        userButton = document.getElementById('account-toggle'),
+        userPopover = document.getElementById('account-popover');
+    function setAccount(open, restoreFocus) {
+      if (!userButton || !userPopover) return;
+      userPopover.hidden = !open;
+      userButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (!open && restoreFocus) userButton.focus();
     }
-    if (burger) burger.addEventListener('click', function () { setMenu(!document.body.classList.contains('nav-open')); });
-    if (scrim) scrim.addEventListener('click', function () { setMenu(false); });
+    if (userButton) userButton.addEventListener('click', function () {
+      setAccount(userButton.getAttribute('aria-expanded') !== 'true', false);
+    });
+    document.addEventListener('click', function (e) {
+      if (userMenu && !(e.target.closest && e.target.closest('#usermenu'))) setAccount(false, false);
+    });
 
-    // Audit filtering + pagination are SERVER-SIDE (GET query params on /ops); no JS needed.
-
-    // Nav: smooth scroll + active state.
-    var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav__item[data-spy]'));
-    function setActive(id) {
-      navItems.forEach(function (n) { n.classList.toggle('is-active', n.getAttribute('data-spy') === id); });
-    }
     function prefersReducedMotion() {
       return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     }
-    navItems.forEach(function (n) {
-      n.addEventListener('click', function (e) {
-        var id = n.getAttribute('data-spy'), el = document.getElementById(id);
-        if (el) { e.preventDefault(); el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' }); setActive(id); setMenu(false); }
+
+    // Views: the segmented control scrolls to the section and tracks the active one.
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.seg__tab[data-view]'));
+    function setActive(view) {
+      tabs.forEach(function (t) {
+        var on = t.getAttribute('data-view') === view;
+        t.classList.toggle('is-active', on);
+        if (on) t.setAttribute('aria-current', 'page');
+        else t.removeAttribute('aria-current');
+      });
+    }
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function (e) {
+        var view = t.getAttribute('data-view'), el = document.getElementById(view);
+        if (!el) return;
+        e.preventDefault();
+        el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+        setActive(view);
+        el.focus({ preventScroll: true });
       });
     });
+    var host = document.getElementById('host');
+    if (host && 'IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) { setActive(entry.isIntersecting && entry.intersectionRatio > 0.4 ? 'host' : 'audit'); });
+      }, { threshold: [0.4] }).observe(host);
+    }
+
+    // Inspector: the sealed record of the selected row. Without JS every row keeps its own
+    // <details> expander; with JS the expander collapses into the side panel.
+    var body = document.getElementById('streambody'),
+        inspector = document.getElementById('inspector'),
+        rows = Array.prototype.slice.call(document.querySelectorAll('.au-row')),
+        SEV_CLASS = { critical: 'pill-down', crit: 'pill-down', alert: 'pill-down', fatal: 'pill-down', error: 'pill-down', err: 'pill-down', warn: 'pill-warn', warning: 'pill-warn' },
+        chainState = (document.getElementById('audit') || document.body).getAttribute('data-chain') || 'unknown',
+        currentHash = '';
+    function fields(row) {
+      var out = {};
+      Array.prototype.forEach.call(row.querySelectorAll('.au-detail__meta dt'), function (dt) {
+        var dd = dt.nextElementSibling;
+        out[(dt.textContent || '').trim()] = dd ? (dd.textContent || '').trim() : '';
+      });
+      return out;
+    }
+    function text(id, value) { var el = document.getElementById(id); if (el) el.textContent = value; }
+    function select(row) {
+      if (!inspector || !row) return;
+      rows.forEach(function (r) { r.classList.toggle('is-selected', r === row); if (r === row) r.setAttribute('aria-current', 'true'); else r.removeAttribute('aria-current'); });
+      var f = fields(row), sev = (f.Severity || 'info').toLowerCase(), sevEl = document.getElementById('insp-sev');
+      if (sevEl) { sevEl.className = 'pill ' + (SEV_CLASS[sev] || 'pill-info'); sevEl.textContent = f.Severity || 'info'; }
+      text('insp-when', (row.querySelector('.au-when') || {}).textContent || '');
+      text('insp-seq', f.Seq && f.Seq !== '—' ? '#' + f.Seq : '');
+      text('insp-action', f.Action || '');
+      text('insp-target', f.Target && f.Target !== '—' ? f.Target : '');
+      var list = document.getElementById('insp-fields');
+      if (list) {
+        while (list.firstChild) list.removeChild(list.firstChild);
+        [['Source', f.Source], ['Actor', f.Actor], ['Detail', f.Detail], ['Timestamp', f.Timestamp]].forEach(function (pair) {
+          if (!pair[1] || pair[1] === '—') return;
+          var dt = document.createElement('dt'), dd = document.createElement('dd');
+          dt.textContent = pair[0];
+          dd.textContent = pair[1];
+          if (pair[0] === 'Timestamp') dd.className = 'mono';
+          list.appendChild(dt);
+          list.appendChild(dd);
+        });
+      }
+      currentHash = f.Hash && f.Hash !== '—' ? f.Hash : '';
+      text('insp-prev', f['Prev hash'] && f['Prev hash'] !== '—' ? f['Prev hash'].slice(0, 12) : '—');
+      text('insp-hash', currentHash ? currentHash.slice(0, 12) : '—');
+      var chain = document.getElementById('insp-chain'), state = document.getElementById('insp-chain-state'), ok = chainState === 'ok';
+      if (chain) chain.setAttribute('data-state', ok ? 'ok' : (chainState === 'bad' ? 'down' : 'unknown'));
+      if (state) { state.className = 'pill ' + (ok ? 'pill-ok' : (chainState === 'bad' ? 'pill-down' : 'pill-unknown')); state.textContent = ok ? 'Verified' : (chainState === 'bad' ? 'Broken' : '—'); }
+      var copy = document.getElementById('insp-copy');
+      if (copy) copy.disabled = !currentHash;
+      inspector.hidden = false;
+      if (body) body.classList.add('has-inspector');
+    }
+    rows.forEach(function (row) {
+      row.setAttribute('tabindex', '0');
+      row.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('a, summary, details')) return;
+        select(row);
+      });
+      row.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(row); }
+      });
+    });
+    var copyBtn = document.getElementById('insp-copy');
+    if (copyBtn) copyBtn.addEventListener('click', function () {
+      if (!currentHash || !navigator.clipboard) return;
+      navigator.clipboard.writeText(currentHash).then(function () {
+        copyBtn.textContent = 'Copied';
+        window.setTimeout(function () { copyBtn.textContent = 'Copy hash'; }, 1200);
+      });
+    });
+    if (rows.length && window.innerWidth > 1180) select(rows[0]);
   })();
   </script>
 </body>

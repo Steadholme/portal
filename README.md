@@ -6,27 +6,31 @@ Portal 是 Steadholme 主权基础设施的**顶级入口（apex command center 
 仅内网可达（只能经 Sluice 在 `w33d.xyz` 主机上访问）。
 
 技术栈与 keystone / keyward / beacon 一致：Rust + axum、env 驱动的 `Config`、`healthcheck` 子命令、
-多阶段非 root Dockerfile（rustls + `ring`，不链接 OpenSSL）、内嵌 Steadholme 企业级设计令牌
-（品牌渐变 `#0B1220→#0F172A`、靛蓝强调色 `#4F46E5`、圆角卡片、状态药丸、盾徽 + 字标应用栏）。
+多阶段非 root Dockerfile（rustls + `ring`，不链接 OpenSSL）、内嵌 Portal 自己的设计令牌
+（画布 `#F6F7F9`、强调蓝 `#2F5BD3`、8–16px 圆角、状态药丸、盾徽；Figma 源：w33d's team › Portal）。
 
-## 指挥中心仪表盘 `GET /`
+## 启动台 `GET /`（v2 · Command canvas）
 
-现代化的运维指挥中心（server-rendered，CSS 内嵌），自上而下：
+server-rendered，无 JS 也完整可用；页面上每个字符串只允许是**名称、数值或动作**（没有眉标、坐标、来源说明、只读提示或计数）。自上而下：
 
-- **应用栏（sticky）**：左侧盾徽 + `Steadholme` 字标 + `Command Center` 标签；右侧登录邮箱（带首字母头像）+
-  指向 `https://sso.w33d.xyz/_gw/auth/logout` 的退出链接（**绝对地址**，跨子域）。
-- **品牌渐变 Hero**：基于服务器时间的问候语（`Good morning/afternoon/evening, <Name>`，name 取邮箱
-  local-part 首字母大写）+ 一行实时摘要（`N of M systems operational · K audit events sealed`）。
-- **实时指标卡（live metric cards）**——悬浮于 Hero 下沿，大数字 + 标签 + 强调色：
-  - **Systems online** `<up>/<total>` 运行中组件（来自 Beacon）+ All operational / Degraded 标签
-  - **Host CPU** 最新 `cpu_pct`（来自 Vitals）+ 进度条 + Nominal/Elevated/Critical
-  - **Host memory** 最新 `mem_pct`（来自 Vitals）+ 进度条
-  - **Audit events** 审计链长度（来自 Watchtower `/api/verify`）+ `✓ Chain verified` / `⚠ Integrity broken`
-  - **Load · 1m** 最新 `load1`（来自 Vitals）
-- **服务网格（services grid）**：每个目录条目一张卡——内联 SVG 图标、服务名、一行描述、**实时状态药丸**
-  （`operational` / `degraded` / `down`，不可达时 `unknown`），整卡链接到对应产品 surface。
-- **最近活动（recent activity）**：Watchtower 最近 ~8 条审计事件（action、actor、相对时间，按严重度着色圆点）。
-- 响应式：窄屏下指标卡与双栏自动堆叠；WCAG AA 对比度。
+- **顶行**：盾徽（回到首页）、机队芯片 `N/M up`（Beacon 有数据时才出现）、账号弹层（Account / All services / Sign out，退出指向 `https://sso.w33d.xyz/_gw/auth/logout`）。
+- **命令框**：唯一入口。`?q=` 服务端过滤；有 JS 时就地过滤簇，`⌘K` / `/` 打开命令面板（模糊匹配、键盘导航）。下方是本机记住的 **最近 / 已置顶** 胶囊（localStorage，键名冻结为 `holdfast.portal.*.v1`）。
+- **便当区左列（`#estate-live`，Wire 可整体刷新）**：
+  - **Fleet** 卡：环形图每个点是一个 Beacon 组件，中心 `up/total`；非 operational 的组件按名字 + 状态药丸列出；`Refresh`（`X-Wire: 1` 片段替换）与 `Status` 链接。
+  - **Host** 卡：CPU / Memory / Load 三条竖表（Vitals）、24h 事件数、`N sealed · chain verified`（Watchtower）。
+- **便当区右列**：按类别成簇的图标 + 名称瓦片（Communication、Content & Knowledge、Identity & Security、Observability、AI & Assistants、Developer & Platform、Platform & Tools）。降级 / 宕机在图标角上显示状态环，`Soon` 标记未上线。点击瓦片打开抽屉（状态 / 地址 / 访问面 + Open / Pin）。
+- **Internal 簇**：只在网关签名 attested 的 internal zone 出现，虚线下沉、带 `VPN` 药丸，内部按 Observe / Protect / Ship / Network / Recover 分组。
+
+外部视图只读取 Beacon public projection；组件名、机队汇总与审计事件永远不会从 operator projection 泄漏到外部 HTML（见测试 `beacon_scopes_*`、`dashboard_external_wire_fragment_*`）。
+
+## 操作台 `GET /ops`（v2 · Sealed stream）
+
+管理员（`X-Auth-Groups` ∩ {admins, infra-admins}）专用，只读：
+
+- **顶行**：盾徽 + `Audit · Host` 分段控件 + 账号弹层。
+- **摘要条**：Chain（链长 + 验证结论）、Fleet（operator projection 的 `up/total`，非 operational 组件名）、CPU、Memory、Load、Events（匹配当前筛选的事件数）。
+- **审计流**：按 Today / Yesterday / 日期分组的事件行（时间、严重度色轨、mono 动作、目标、来源、操作者）；筛选是 GET 表单——动作搜索框 + Source / Actor / Range 三个 `<details>` 芯片（无 JS 亦可用，激活时显示值与 Clear 链接）；分页链接保留全部筛选。每行内含 `<details>` 密封记录（Seq / Timestamp / … / Prev hash / Hash），有 JS 时折叠进右侧**检视器**（记录字段 + prev → hash 链可视化 + Verified 药丸 + Open in Watchtower / Copy hash）。
+- **Host**：Vitals 主机指标块。服务健康属于 Beacon，不在 Portal 出现。
 
 ## 实时数据（并发拉取 + 缓存）
 

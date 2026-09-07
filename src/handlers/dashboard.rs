@@ -1,17 +1,15 @@
-//! The apex command center: `GET /` renders the Steadholme operations dashboard.
+//! The apex launcher: `GET /` renders the Steadholme Portal "command canvas".
 //!
-//! A sticky app-bar (shield + wordmark, signed-in email, logout), a brand-gradient hero with
-//! a time-of-day greeting, a row of LIVE METRIC CARDS (systems online, host CPU/memory, audit
-//! events, load), a SERVICES grid (one live-status card per catalog entry), and a RECENT
-//! ACTIVITY feed of the latest audit events. The signed-in email comes from the
-//! gateway-injected `X-Auth-Email` (Portal does no login of its own). The optional
-//! internal-only management section is gated by the gateway-injected `X-Gateway-Zone`.
+//! The page is command-first: a single search field, the locally remembered recent/pinned
+//! services, a live Fleet + Host summary, and the catalog as category clusters of icon + name
+//! tiles. Every visible string is a name, a value or an action — no eyebrows, coordinates,
+//! source attributions or counts. The signed-in email comes from the gateway-injected
+//! `X-Auth-Email` (Portal does no login of its own). The optional internal-only management
+//! cluster is gated by the gateway-injected `X-Gateway-Zone`.
 //!
 //! Every live number is best-effort: the data comes from a single cached, concurrent fetch of
 //! Beacon / Vitals / Watchtower ([`crate::snapshot`]). Any unreachable backend degrades its
-//! own card/pill/feed to "—"/"unknown"/empty — the page NEVER errors or hangs.
-
-use std::time::{SystemTime, UNIX_EPOCH};
+//! own figure to "—"/"unknown" — the page NEVER errors or hangs.
 
 use axum::extract::{Query, State};
 use axum::http::{header, HeaderMap, HeaderValue};
@@ -23,19 +21,18 @@ use crate::auth;
 use crate::beacon::Statuses;
 use crate::catalog::CatalogEntry;
 use crate::handlers::{
-    app_css, esc, fmt_pct, greeting, icon_for, name_from_email, pct_width, rel_time,
-    severity_dot_class, status_label, status_pill_class, SHIELD_SVG,
+    esc, fmt_count, fmt_pct, icon_for, name_from_email, pct_width, status_label, status_pill,
+    status_pill_class, SHIELD_SVG,
 };
-use crate::manifest::ProjectionIdentity;
 use crate::snapshot::Snapshot;
-use crate::watchtower::{Event, Verify};
 use crate::AppState;
 
 const DASHBOARD_HTML: &str = include_str!("../../templates/dashboard.html");
 const HEADER_WIRE: &str = "x-wire";
 const MGMT_SECTION_ID: &str = "infraops";
-const MGMT_SECTION_LABEL: &str = "Infrastructure & Operations";
-const MGMT_SECTION_STYLE: &str = "more";
+const MGMT_SECTION_LABEL: &str = "Internal";
+/// How many non-operational components the Fleet card lists by name before folding the rest.
+const FLEET_ISSUE_LIMIT: usize = 4;
 
 #[derive(Deserialize, Default)]
 pub struct DashQuery {
@@ -47,21 +44,11 @@ pub struct DashQuery {
 struct CatalogView<'a> {
     public: &'a [CatalogEntry],
     internal: Option<&'a [CatalogEntry]>,
-    public_projection: Option<&'a ProjectionIdentity>,
-    estate_projection: Option<&'a ProjectionIdentity>,
 }
 
-#[derive(Clone, Copy)]
-struct EstateSummary<'a> {
-    public_surface_count: usize,
-    internal_surface_count: Option<usize>,
-    public_projection: Option<&'a ProjectionIdentity>,
-    estate_projection: Option<&'a ProjectionIdentity>,
-}
-
-/// `GET /` — the command center. Renders for any request the gateway forwards; the signed-in
-/// email comes from the injected `X-Auth-Email`, and every live figure from the (cached)
-/// concurrent backend snapshot.
+/// `GET /` — the launcher. Renders for any request the gateway forwards; the signed-in email
+/// comes from the injected `X-Auth-Email`, and every live figure from the (cached) concurrent
+/// backend snapshot.
 pub async fn dashboard(
     State(state): State<AppState>,
     Query(query): Query<DashQuery>,
@@ -76,21 +63,15 @@ pub async fn dashboard(
     } else {
         &snap.public_statuses
     };
-    let clock = clock();
     let internal_catalog = internal_zone.then(|| state.config.internal_catalog.as_slice());
     let body = render(
         CatalogView {
             public: &state.config.catalog,
             internal: internal_catalog,
-            public_projection: state.config.public_projection.as_ref(),
-            estate_projection: internal_zone
-                .then_some(state.config.estate_projection.as_ref())
-                .flatten(),
         },
         &email,
         &snap,
         statuses,
-        clock,
         query.q.trim(),
         wire_fragment,
     );
@@ -116,33 +97,18 @@ fn wire_request(headers: &HeaderMap) -> bool {
     )
 }
 
-/// Current epoch seconds + the local-ish hour-of-day (UTC) for the greeting.
-fn clock() -> (i64, u32) {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let hour = ((secs.rem_euclid(86_400)) / 3_600) as u32;
-    (secs, hour)
-}
-
 fn render(
     view: CatalogView<'_>,
     email: &str,
     snap: &Snapshot,
     statuses: &Statuses,
-    clock: (i64, u32),
     search_query: &str,
     wire_fragment: bool,
 ) -> String {
     let CatalogView {
         public: catalog,
         internal: internal_catalog,
-        public_projection,
-        estate_projection,
     } = view;
-    let (now_secs, hour) = clock;
-    let public_surface_count = catalog.len();
     let name = name_from_email(email);
     let initial = name
         .chars()
@@ -158,7 +124,6 @@ fn render(
         Some(filter_catalog(catalog, &q_lower))
     };
     let catalog = filtered_catalog.as_deref().unwrap_or(catalog);
-    let internal_surface_count = internal_catalog.map(|entries| entries.len());
     let filtered_mgmt = if q.is_empty() {
         None
     } else {
@@ -169,509 +134,262 @@ fn render(
     } else {
         filtered_mgmt.as_deref()
     };
-    let sidebar_nav = render_sidebar_nav(catalog, mgmt);
-    let sections = render_dashboard_sections(catalog, mgmt, statuses, q);
-    let estate_live = render_estate_live(
-        snap,
-        statuses,
-        now_secs,
-        EstateSummary {
-            public_surface_count,
-            internal_surface_count,
-            public_projection,
-            estate_projection,
-        },
-    );
+    // The live region is ONE independent read-only block: Wire may replace it without
+    // invalidating the catalog nodes held by the launcher/pin/palette runtime. The same bytes
+    // are embedded in the full document and returned alone for `X-Wire: 1`.
+    let live = render_live(snap, statuses, internal_catalog.is_some());
     if wire_fragment {
-        return estate_live;
+        return live;
     }
+    let sections = render_dashboard_sections(catalog, mgmt, statuses, q);
     let runtime = odyssey::dynamic_scripts_with(RuntimeOpts::new().with_motion());
-    let hero_telemetry = hero_sub(snap, statuses);
-    let greeting = greeting(hour);
     DASHBOARD_HTML
-        .replace("{{CSS}}", app_css())
         .replace("{{SHIELD}}", SHIELD_SVG)
         .replace("{{INITIAL}}", &esc(&initial))
         .replace("{{NAME}}", &esc(&name))
         .replace("{{EMAIL}}", &esc(email))
-        .replace("{{GREETING}}", greeting)
-        .replace("{{HERO_SUB}}", &hero_telemetry)
-        .replace(
-            "{{PUBLIC_SURFACE_COUNT}}",
-            &public_surface_count.to_string(),
-        )
         .replace("{{HEALTH_CHIP}}", &health_chip(statuses))
-        .replace("{{SIDEBAR_NAV}}", &sidebar_nav)
-        .replace("{{ESTATE_LIVE}}", &estate_live)
+        .replace("{{LIVE}}", &live)
         .replace("{{SECTIONS}}", &sections)
         .replace("{{SEARCH_VALUE}}", &esc(q))
         .replace("{{ODYSSEY_RUNTIME}}", runtime.as_str())
 }
 
-/// The sidebar catalog nav: one item per non-empty category (in [`SECTION_ORDER`]), with an
-/// accent dot and a live app-count badge. The `data-spy` key matches the section element id so
-/// the client-side scroll-spy can highlight the active section.
-fn render_sidebar_nav(catalog: &[CatalogEntry], mgmt: Option<&[CatalogEntry]>) -> String {
-    let mut out = String::new();
-    for (key, label, apps) in grouped_catalog(catalog) {
-        let count = apps.len();
-        out.push_str(&format!(
-            r##"<a class="nav__item" href="#{key}" data-spy="{key}"><span class="nav__dot nav__dot--{key}"></span><span class="nav__text">{label}</span><span class="nav__count">{count}</span></a>"##,
-            key = key,
-            label = esc(label),
-            count = count,
-        ));
-    }
-    if let Some(mgmt) = mgmt {
-        if !mgmt.is_empty() {
-            out.push_str(&format!(
-                r##"<a class="nav__item" href="#{key}" data-spy="{key}"><span class="nav__dot nav__dot--{style}"></span><span class="nav__text">{label}</span><span class="nav__count">{count}</span></a>"##,
-                key = MGMT_SECTION_ID,
-                style = MGMT_SECTION_STYLE,
-                label = esc(MGMT_SECTION_LABEL),
-                count = mgmt.len(),
-            ));
-        }
-    }
-    out
-}
-
-/// The app-bar health chip: "N/M operational" tinted by whether everything is up. Degrades to
-/// a neutral "status syncing" label until Beacon first reports.
+/// The top-row fleet chip: "N/M up" tinted by whether everything is up. Nothing is rendered
+/// until Beacon first reports — there is no value to show.
 fn health_chip(s: &Statuses) -> String {
     if s.reached && s.total > 0 {
         let cls = if s.up == s.total { "is-ok" } else { "is-warn" };
         format!(
-            r#"<span class="healthchip {cls}"><span class="dot"></span>{up}/{total} operational</span>"#,
+            r#"<span class="healthchip {cls}"><span class="dot"></span>{up}/{total} up</span>"#,
             cls = cls,
             up = s.up,
             total = s.total,
         )
     } else {
-        r#"<span class="healthchip"><span class="dot"></span>status syncing</span>"#.to_string()
-    }
-}
-
-fn incident_banner(s: &Statuses) -> String {
-    if !s.reached || s.total == 0 || s.up >= s.total {
-        return String::new();
-    }
-    let issues: Vec<_> = s
-        .components
-        .iter()
-        .filter(|c| c.status != "operational")
-        .collect();
-    let names = issues
-        .iter()
-        .take(3)
-        .map(|c| esc(&c.name))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let more = if issues.len() > 3 {
-        format!(" +{} more", issues.len() - 3)
-    } else {
         String::new()
-    };
-    let variant = if issues.iter().any(|c| c.status == "down") {
-        "incidentbar--down"
-    } else {
-        "incidentbar--warn"
-    };
-    format!(
-        r#"<div class="incidentbar {variant}" role="status">
-  <span class="incidentbar__dot" aria-hidden="true"></span>
-  <p class="incidentbar__text"><strong>{affected} of {total} systems</strong> reporting issues: {names}{more}</p>
-  <a class="incidentbar__link" href="https://status.w33d.xyz">View status &rarr;</a>
-</div>"#,
-        variant = variant,
-        affected = s.total - s.up,
-        total = s.total,
-        names = names,
-        more = more,
-    )
-}
-
-/// One-line live summary under the greeting.
-fn hero_sub(snap: &Snapshot, statuses: &Statuses) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if statuses.reached && statuses.total > 0 {
-        parts.push(format!(
-            "{} of {} systems operational",
-            statuses.up, statuses.total
-        ));
-    }
-    if snap.verify.reached {
-        parts.push(format!("{} audit events sealed", snap.verify.count));
-    }
-    if parts.is_empty() {
-        "Live telemetry is catching up — backends will report shortly.".to_string()
-    } else {
-        esc(&parts.join("  ·  "))
     }
 }
 
-/// The Odyssey Estate bridge. It is deliberately one independent, read-only region: Wire may
-/// replace it without invalidating the catalog nodes held by the launcher/pin/palette runtime.
-/// The same bytes are embedded in the full SSR document and returned for `X-Wire: 1`.
-fn render_estate_live(
-    snap: &Snapshot,
-    statuses: &Statuses,
-    now_secs: i64,
-    summary: EstateSummary<'_>,
-) -> String {
-    let EstateSummary {
-        public_surface_count,
-        internal_surface_count,
-        public_projection,
-        estate_projection,
-    } = summary;
+// --- Live region: Fleet + Host ----------------------------------------------------------
+
+/// Overall fleet state token for the live region: unknown until Beacon reports, operational
+/// only when every component is up, down when any component is down, else degraded.
+fn overall_state(statuses: &Statuses) -> &'static str {
+    if !statuses.reached || statuses.total == 0 {
+        "unknown"
+    } else if statuses.up == statuses.total {
+        "operational"
+    } else if statuses.components.iter().any(|c| c.status == "down") {
+        "down"
+    } else {
+        "degraded"
+    }
+}
+
+fn render_live(snap: &Snapshot, statuses: &Statuses, internal: bool) -> String {
     let refresh = odyssey::link_with_wire(
         "/?refresh=1#estate-live",
-        "Refresh snapshot",
+        "Refresh",
         WireOpts::new("#estate-live")
             .select("#estate-live")
             .swap(WireSwap::Outer)
             .busy_label("Refreshing…")
-            .success_message("Estate snapshot refreshed")
-            .error_message("Could not refresh the Estate snapshot"),
+            .success_message("Refreshed")
+            .error_message("Could not refresh"),
     );
-    let overall = if !statuses.reached || statuses.total == 0 {
-        "unknown"
-    } else if statuses.up == statuses.total {
-        "operational"
-    } else {
-        "degraded"
-    };
-    let access_scope = if internal_surface_count.is_some() {
-        "internal"
-    } else {
-        "public"
-    };
-    let access_label = if internal_surface_count.is_some() {
-        "Public + WireGuard routes"
-    } else {
-        "Public edge + restricted routes"
-    };
-    let internal_count_attr = internal_surface_count
-        .map(|count| format!(r#" data-internal-surface-count="{count}""#))
-        .unwrap_or_default();
-    let detail_open = if overall == "degraded" { " open" } else { "" };
+    format!(
+        r#"<section class="live" id="estate-live" role="region" aria-label="Live" data-state="{overall}" data-up="{up}" data-total="{total}" data-access-scope="{access_scope}">
+{fleet}
+{host}
+</section>"#,
+        overall = overall_state(statuses),
+        up = statuses.up,
+        total = statuses.total,
+        access_scope = if internal { "internal" } else { "public" },
+        fleet = render_fleet_card(statuses, refresh.as_str()),
+        host = render_host_card(snap),
+    )
+}
 
-    // Instrument strip data
-    let cpu_val = snap
-        .metrics
-        .cpu_pct
-        .map(|v| format!("{:.1}", v))
-        .unwrap_or_else(|| "—".to_string());
-    let mem_val = snap
-        .metrics
-        .mem_pct
-        .map(|v| format!("{:.1}", v))
-        .unwrap_or_else(|| "—".to_string());
-    let load_val = snap
-        .metrics
-        .load1
-        .map(|v| format!("{:.2}", v))
-        .unwrap_or_else(|| "—".to_string());
-    // Reached-but-broken is an integrity failure, not a degradation: map it to "down" so the
-    // instrument cell agrees with `audit_foot()`'s "⚠ Integrity broken" severity.
-    let verify_status = if !snap.verify.reached {
+/// The Fleet card: one dot per Beacon component on a ring, the up/total readout in the
+/// centre, and the non-operational components listed by name with a status pill.
+fn render_fleet_card(statuses: &Statuses, refresh: &str) -> String {
+    let reached = statuses.reached && statuses.total > 0;
+    let mut dots = String::new();
+    let mut issues = String::new();
+    if reached {
+        for (index, component) in statuses.components.iter().enumerate() {
+            let tone = match component.status.as_str() {
+                "operational" => "ok",
+                "degraded" => "warn",
+                "down" => "down",
+                _ => "unknown",
+            };
+            dots.push_str(&format!(
+                r#"<span class="ring__dot ring__dot--{tone}" style="--i:{index}" title="{name} · {label}"></span>"#,
+                tone = tone,
+                index = index,
+                name = esc(&component.name),
+                label = status_label(&component.status),
+            ));
+        }
+        let troubled: Vec<_> = statuses
+            .components
+            .iter()
+            .filter(|c| c.status != "operational")
+            .collect();
+        if troubled.is_empty() {
+            issues.push_str(&format!(
+                r#"<li class="issues__ok">{check}<span>{total} operational</span></li>"#,
+                check = ICON_CHECK,
+                total = statuses.total,
+            ));
+        } else {
+            for component in troubled.iter().take(FLEET_ISSUE_LIMIT) {
+                issues.push_str(&format!(
+                    r#"<li><span class="issues__name">{name}</span>{pill}</li>"#,
+                    name = esc(&component.name),
+                    pill = status_pill(&component.status),
+                ));
+            }
+            if troubled.len() > FLEET_ISSUE_LIMIT {
+                issues.push_str(&format!(
+                    r#"<li class="issues__more">+{more}</li>"#,
+                    more = troubled.len() - FLEET_ISSUE_LIMIT,
+                ));
+            }
+        }
+    } else {
+        issues.push_str(r#"<li class="issues__ok"><span>—</span></li>"#);
+    }
+    let centre = if reached {
+        format!(
+            "<b>{up}/{total}</b><small>up</small>",
+            up = statuses.up,
+            total = statuses.total
+        )
+    } else {
+        "<b>—</b>".to_string()
+    };
+    format!(
+        r#"<article class="pcard pcard--fleet" data-motion-enter>
+  <header class="pcard__head">
+    <h2>Fleet</h2>
+    <span class="pcard__tools">{refresh}<a href="https://status.w33d.xyz">Status {ext}</a></span>
+  </header>
+  <div class="fleet">
+    <div class="ring" style="--n:{n}" aria-hidden="true"><span class="ring__orbit"></span>{dots}<span class="ring__centre">{centre}</span></div>
+    <ul class="issues">{issues}</ul>
+  </div>
+</article>"#,
+        refresh = refresh,
+        ext = ICON_EXTERNAL,
+        n = statuses.components.len().max(1),
+        dots = dots,
+        centre = centre,
+        issues = issues,
+    )
+}
+
+/// The Host card: three vertical meters (CPU / memory / load) from Vitals, the recent
+/// Watchtower event count, and the sealed-chain verdict.
+fn render_host_card(snap: &Snapshot) -> String {
+    let cpu = snap.metrics.cpu_pct;
+    let mem = snap.metrics.mem_pct;
+    let load = snap.metrics.load1;
+    let meters = [
+        meter(
+            "CPU",
+            &fmt_pct(cpu),
+            cpu.map(pct_width_opt),
+            gauge_state(cpu),
+        ),
+        meter(
+            "Memory",
+            &fmt_pct(mem),
+            mem.map(pct_width_opt),
+            gauge_state(mem),
+        ),
+        meter(
+            "Load",
+            &load_value(load),
+            load.map(load_width),
+            load_state(load),
+        ),
+    ]
+    .concat();
+    // Reached-but-broken is an integrity failure, not a degradation: it maps to "down".
+    let chain_state = if !snap.verify.reached {
         "unknown"
     } else if snap.verify.ok {
         "operational"
     } else {
         "down"
     };
-    let verify_label = if snap.verify.reached {
-        snap.verify.count.to_string()
+    let chain = if snap.verify.reached {
+        format!(
+            r#"{check}<span class="chain__count">{count} sealed</span><span class="chain__word">{word}</span>"#,
+            check = ICON_CHECK,
+            count = fmt_count(snap.verify.count),
+            word = if snap.verify.ok {
+                "chain verified"
+            } else {
+                "integrity broken"
+            },
+        )
     } else {
-        "—".to_string()
+        format!(
+            r#"{check}<span class="chain__count">—</span>"#,
+            check = ICON_CHECK
+        )
     };
-    let event_count = snap.events.len();
-
     format!(
-        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title" data-state="{overall}" data-up="{up}" data-total="{total}" data-access-scope="{access_scope}" data-public-surface-count="{public_surface_count}"{internal_count_attr}>
-{incident}
-<div class="estate-rail ody-status-rail">
-  <span class="ody-index">ESTATE / LIVE</span>
-  <h2 id="estate-title">Estate pulse</h2>
-  {signal}
-  <span class="estate-rail__scope">{access_label}</span>
-  <span class="estate-rail__actions"><a href="https://status.w33d.xyz">Open status</a>{refresh}</span>
-</div>
-<div class="ody-instrument">
-  <div class="ody-instrument__cell" data-ody-status="{verify_status}">
-    <span class="ody-instrument__label">Verify</span>
-    <span class="ody-instrument__value">{verify_label}</span>
-  </div>
-  <div class="ody-instrument__cell">
-    <span class="ody-instrument__label">CPU</span>
-    <span class="ody-instrument__value">{cpu_val}<span class="ody-instrument__unit">%</span></span>
-  </div>
-  <div class="ody-instrument__cell">
-    <span class="ody-instrument__label">Memory</span>
-    <span class="ody-instrument__value">{mem_val}<span class="ody-instrument__unit">%</span></span>
-  </div>
-  <div class="ody-instrument__cell">
-    <span class="ody-instrument__label">Load</span>
-    <span class="ody-instrument__value">{load_val}</span>
-  </div>
-  <div class="ody-instrument__cell">
-    <span class="ody-instrument__label">Events</span>
-    <span class="ody-instrument__value">{event_count}</span>
-  </div>
-</div>
-<details class="estate-detail"{detail_open}>
-  <summary><span>Estate details</span><span>Access map · fleet health · sealed activity</span></summary>
-  <div class="estate-detail__body">
-    <section class="estate-deck" aria-label="Estate access planes">
-      <div class="estate-deck__head">
-        <div>
-          <p class="estate-deck__eyebrow">Access map · read-only</p>
-          <h3>One estate, three trust paths</h3>
-        </div>
-        <div class="estate-deck__actions">{manifest}</div>
-      </div>
-      {planes}
-    </section>
-    <div class="estate-observe">
-      <section class="sys estate-health" id="sys" aria-labelledby="estate-health-title">
-        <div class="sys__head">
-          <h3 id="estate-health-title">Fleet health</h3>
-          <span class="hint">Beacon · Vitals · Watchtower</span>
-        </div>
-        <div class="metrics">{metrics}</div>
-      </section>
-      <section class="sys estate-activity" id="activity" aria-labelledby="estate-activity-title">
-        <div class="sys__head">
-          <h3 id="estate-activity-title">Recent signals</h3>
-          <span class="hint">Sealed audit events</span>
-        </div>
-        <div class="feedcard" data-motion-list>{activity}</div>
-      </section>
-    </div>
-  </div>
-</details>
-</section>"#,
-        incident = incident_banner(statuses),
-        overall = overall,
-        up = statuses.up,
-        total = statuses.total,
-        access_scope = access_scope,
-        access_label = access_label,
-        public_surface_count = public_surface_count,
-        internal_count_attr = internal_count_attr,
-        detail_open = detail_open,
-        manifest = render_manifest_signal(
-            public_projection,
-            estate_projection,
-            public_surface_count + internal_surface_count.unwrap_or(0),
-        ),
-        signal = fleet_signal(statuses),
-        refresh = refresh,
-        verify_status = verify_status,
-        verify_label = verify_label,
-        cpu_val = cpu_val,
-        mem_val = mem_val,
-        load_val = load_val,
-        event_count = event_count,
-        planes = render_access_planes(public_surface_count, internal_surface_count),
-        metrics = render_metrics(snap, statuses),
-        activity = render_activity(&snap.events, now_secs, internal_surface_count.is_some(),),
+        r#"<article class="pcard pcard--host" data-motion-enter>
+  <header class="pcard__head">
+    <h2>Host</h2>
+    <span class="pcard__aside"><b>{events}</b>events</span>
+  </header>
+  <div class="meters">{meters}</div>
+  <p class="chain" data-state="{chain_state}">{chain}</p>
+</article>"#,
+        events = fmt_count(snap.events.len()),
+        meters = meters,
+        chain_state = chain_state,
+        chain = chain,
     )
 }
 
-fn render_manifest_signal(
-    public: Option<&ProjectionIdentity>,
-    estate: Option<&ProjectionIdentity>,
-    surface_count: usize,
-) -> String {
-    let Some(public) = public else {
-        return r#"<span class="estate-signal estate-signal--manifest"><span aria-hidden="true"></span>Built-in development catalog</span>"#.to_string();
-    };
-    let mut identities = vec![render_projection_identity("public", public)];
-    if let Some(estate) = estate {
-        identities.push(render_projection_identity("estate", estate));
-    }
+fn meter(label: &str, value: &str, fill: Option<f64>, state: &str) -> String {
     format!(
-        r#"<span class="estate-signal estate-signal--manifest" data-manifest-surface-count="{surface_count}"><span aria-hidden="true"></span>Manifest {release} · {surface_count} surfaces · {identities}</span>"#,
-        release = esc(&public.release),
-        identities = identities.join(" · "),
-    )
-}
-
-fn render_projection_identity(audience: &str, identity: &ProjectionIdentity) -> String {
-    let short: String = identity.fingerprint.chars().take(18).collect();
-    format!(
-        r#"<span data-manifest-audience="{audience}" data-manifest-release="{release}" data-manifest-fingerprint="{fingerprint}" title="{audience} projection · {release} · {fingerprint}">{audience} {short}</span>"#,
-        audience = esc(audience),
-        release = esc(&identity.release),
-        fingerprint = esc(&identity.fingerprint),
-        short = esc(&short),
-    )
-}
-
-fn fleet_signal(statuses: &Statuses) -> String {
-    if statuses.reached && statuses.total > 0 {
-        let class = if statuses.up == statuses.total {
-            "estate-signal--ok"
-        } else {
-            "estate-signal--warn"
-        };
-        return format!(
-            r#"<span class="estate-signal {class}" role="status"><span aria-hidden="true"></span>{up}/{total} operational</span>"#,
-            class = class,
-            up = statuses.up,
-            total = statuses.total,
-        );
-    }
-    r#"<span class="estate-signal" role="status"><span aria-hidden="true"></span>Snapshot syncing</span>"#
-        .to_string()
-}
-
-/// Access-plane copy comes only from the configured public catalog, the exact gateway-attested
-/// zone, and the Estate projection. The external view never receives management URLs.
-fn render_access_planes(
-    public_surface_count: usize,
-    internal_surface_count: Option<usize>,
-) -> String {
-    let (private_value, private_copy, private_state, private_class) = match internal_surface_count {
-        Some(count) => (
-            format!("{count} management surfaces"),
-            "Gateway attests the internal zone; WireGuard-only consoles are available below.",
-            "Internal zone",
-            " estate-plane--connected",
-        ),
-        None => (
-            "WireGuard required".to_string(),
-            "Management hostnames stay hidden until the gateway attests an internal connection.",
-            "Restricted",
-            "",
-        ),
-    };
-    format!(
-        r#"<div class="estate-planes">
-  <article class="estate-plane estate-plane--public" data-motion-enter>
-    <p class="estate-plane__rail"><span>01</span>Public gateway</p>
-    <h3>{public_count} product surfaces</h3>
-    <p>Internet-routable catalog entries. Each product keeps its own authentication policy.</p>
-    <span class="estate-plane__state"><span aria-hidden="true"></span>Routed catalog</span>
-  </article>
-  <article class="estate-plane estate-plane--status" data-motion-enter>
-    <p class="estate-plane__rail"><span>02</span>Open status</p>
-    <h3>Anonymous, read-only</h3>
-    <p><a href="https://status.w33d.xyz">status.w33d.xyz</a> stays publicly readable; no Portal identity or WireGuard connection is required.</p>
-    <span class="estate-plane__state"><span aria-hidden="true"></span>Public</span>
-  </article>
-  <article class="estate-plane estate-plane--private{private_class}" data-motion-enter>
-    <p class="estate-plane__rail"><span>03</span>WireGuard plane</p>
-    <h3>{private_value}</h3>
-    <p>{private_copy}</p>
-    <span class="estate-plane__state"><span aria-hidden="true"></span>{private_state}</span>
-  </article>
-</div>"#,
-        public_count = public_surface_count,
-        private_class = private_class,
-        private_value = private_value,
-        private_copy = private_copy,
-        private_state = private_state,
-    )
-}
-
-// --- Metric cards ----------------------------------------------------------------------
-
-/// Render the row of live metric cards.
-fn render_metrics(snap: &Snapshot, s: &Statuses) -> String {
-    let systems_value = if s.reached && s.total > 0 {
-        format!("{}<span class=\"metric__unit\">/{}</span>", s.up, s.total)
-    } else {
-        "—".to_string()
-    };
-    let systems_foot = if s.reached && s.total > 0 {
-        let cls = if s.up == s.total {
-            "tag tag-ok"
-        } else {
-            "tag tag-warn"
-        };
-        let word = if s.up == s.total {
-            "All operational"
-        } else {
-            "Degraded"
-        };
-        format!(r#"<span class="{cls}">{word}</span>"#)
-    } else {
-        r#"<span class="metric__muted">awaiting Beacon</span>"#.to_string()
-    };
-
-    let mut out = String::new();
-    out.push_str(&metric_card(
-        ICON_SYSTEMS,
-        "Systems online",
-        &systems_value,
-        &systems_foot,
-        None,
-    ));
-    out.push_str(&metric_card(
-        ICON_CPU,
-        "Host CPU",
-        &esc(&fmt_pct(snap.metrics.cpu_pct)),
-        &gauge_foot(snap.metrics.cpu_pct),
-        snap.metrics.cpu_pct.map(pct_width_opt),
-    ));
-    out.push_str(&metric_card(
-        ICON_MEM,
-        "Host memory",
-        &esc(&fmt_pct(snap.metrics.mem_pct)),
-        &gauge_foot(snap.metrics.mem_pct),
-        snap.metrics.mem_pct.map(pct_width_opt),
-    ));
-    out.push_str(&metric_card(
-        ICON_AUDIT,
-        "Audit events",
-        &audit_value(&snap.verify),
-        &audit_foot(&snap.verify),
-        None,
-    ));
-    out.push_str(&metric_card(
-        ICON_LOAD,
-        "Load · 1m",
-        &load_value(snap.metrics.load1),
-        r#"<span class="metric__muted">system load average</span>"#,
-        None,
-    ));
-    out
-}
-
-/// A single metric card. `bar` is an optional 0..=100 fill (CPU / memory gauges only).
-fn metric_card(icon: &str, label: &str, value: &str, foot: &str, bar: Option<f64>) -> String {
-    let bar_html = match bar {
-        Some(w) => format!(r#"<div class="metric__bar"><span style="width:{w:.0}%"></span></div>"#),
-        None => String::new(),
-    };
-    format!(
-        r#"<div class="metric">
-  <div class="metric__top">
-    <span class="metric__label">{label}</span>
-    <span class="metric__icon" aria-hidden="true">{icon}</span>
-  </div>
-  <div class="metric__value">{value}</div>
-  {bar}
-  <div class="metric__foot">{foot}</div>
-</div>"#,
+        r#"<div class="meter" data-state="{state}"><span class="meter__value">{value}</span><span class="meter__track"><span class="meter__fill" style="height:{fill:.0}%"></span></span><span class="meter__label">{label}</span></div>"#,
+        state = state,
+        value = esc(value),
+        fill = fill.unwrap_or(0.0),
         label = esc(label),
-        icon = icon,
-        value = value,
-        bar = bar_html,
-        foot = foot,
     )
 }
 
-fn gauge_foot(value: Option<f64>) -> String {
+fn gauge_state(value: Option<f64>) -> &'static str {
     match value {
-        Some(v) if v >= 90.0 => r#"<span class="tag tag-down">Critical</span>"#.to_string(),
-        Some(v) if v >= 75.0 => r#"<span class="tag tag-warn">Elevated</span>"#.to_string(),
-        Some(_) => r#"<span class="tag tag-ok">Nominal</span>"#.to_string(),
-        None => r#"<span class="metric__muted">awaiting Vitals</span>"#.to_string(),
+        Some(v) if v >= 90.0 => "down",
+        Some(v) if v >= 75.0 => "warn",
+        Some(_) => "ok",
+        None => "unknown",
+    }
+}
+
+/// A 1-minute load average drawn against a two-core-equivalent scale: 1.0 fills half.
+fn load_width(load1: f64) -> f64 {
+    (load1 * 50.0).clamp(0.0, 100.0)
+}
+
+fn load_state(load1: Option<f64>) -> &'static str {
+    match load1 {
+        Some(v) if v >= 2.0 => "down",
+        Some(v) if v >= 1.0 => "warn",
+        Some(_) => "ok",
+        None => "unknown",
     }
 }
 
@@ -682,34 +400,15 @@ fn load_value(load1: Option<f64>) -> String {
     }
 }
 
-fn audit_value(verify: &Verify) -> String {
-    if verify.reached {
-        verify.count.to_string()
-    } else {
-        "—".to_string()
-    }
-}
-
-fn audit_foot(verify: &Verify) -> String {
-    if !verify.reached {
-        return r#"<span class="metric__muted">awaiting Watchtower</span>"#.to_string();
-    }
-    if verify.ok {
-        r#"<span class="tag tag-ok">✓ Chain verified</span>"#.to_string()
-    } else {
-        r#"<span class="tag tag-down">⚠ Integrity broken</span>"#.to_string()
-    }
-}
-
 /// `pct_width` already clamps; this thin wrapper keeps the `.map` closures readable.
 fn pct_width_opt(v: f64) -> f64 {
     pct_width(Some(v))
 }
 
-// --- Service directory, grouped into Steadholme field bands -----------------------------
+// --- Service catalog, grouped into category clusters ------------------------------------
 
-/// The fixed section order + display label. A catalog entry is placed by [`category_key`];
-/// the section is rendered only when at least one app falls in it.
+/// The fixed cluster order + display label. A catalog entry is placed by [`category_key`];
+/// the cluster is rendered only when at least one app falls in it.
 const SECTION_ORDER: &[(&str, &str)] = &[
     ("comms", "Communication"),
     ("content", "Content & Knowledge"),
@@ -727,7 +426,7 @@ const INTERNAL_SECTION_ORDER: &[(&str, &str)] = &[
     ("recover", "Recover"),
 ];
 
-/// Map a tile's display name to its section key. Unknown names land in "more" so a newly
+/// Map a tile's display name to its cluster key. Unknown names land in "more" so a newly
 /// added service still renders cleanly without a code change.
 fn category_key(entry: &CatalogEntry) -> &'static str {
     match entry.category.as_str() {
@@ -741,21 +440,20 @@ fn category_key(entry: &CatalogEntry) -> &'static str {
         _ => {}
     }
     match entry.name.as_str() {
-        "Identity" | "Authorization" | "Directory" | "Audit" | "Vault" | "Threat Intel"
-        | "Intel" | "Canary" | "Authz" | "People" | "Pulse" | "Risk" | "Sigil" | "SPIFFE"
-        | "Crucible" | "Detonate" | "Phantom" | "Purple" | "Guard" => "ident",
-        "Blog" | "Forum" | "Wiki" | "Pastefire" | "Paste" | "Search" | "Drive" | "Comments" => {
-            "content"
-        }
+        "Identity" | "Account" | "Access" | "Authorization" | "Directory" | "Audit" | "Vault"
+        | "Threat Intel" | "Intel" | "Canary" | "Authz" | "People" | "Pulse" | "Risk" | "Sigil"
+        | "SPIFFE" | "Crucible" | "Detonate" | "Phantom" | "Purple" | "Guard" => "ident",
+        "Blog" | "Forum" | "Wiki" | "Pastefire" | "Paste" | "Search" | "Drive" | "Comments"
+        | "CanvasMind" | "Heartlines" => "content",
         "Mail" | "Chat" | "Notifications" | "Notify" | "Inbox" | "Calendar" | "Feeds" | "Clips"
         | "Social" => "comms",
         "Status" | "Vitals" | "Audit log" | "Logs" | "Sift" | "RCA" | "Traces" | "Filament"
         | "Augur" => "obs",
-        "Assistant" | "AI Gateway" | "Multica" | "Relay" | "Grimoire" | "Familiar" | "Warden"
-        | "Cascade" => "ai",
+        "Assistant" | "AI Gateway" | "Multica" | "ComfyUI" | "Studio" | "Relay" | "Grimoire"
+        | "Familiar" | "Warden" | "Cascade" => "ai",
         "Git" | "Registry" | "Events" | "Jobs" | "Backup" | "Lodestar" | "DNS" | "Ripple"
         | "Eddy" | "Edge" | "Anvil" | "CI" | "Atlas" | "Mycelium" | "Mesh" | "Skiff" | "Deploy"
-        | "Estuary" | "Egress" | "VPN enrollment" => "dev",
+        | "Estuary" | "Egress" | "VPN enrollment" | "Cistern" | "Sites" | "Odyssey" => "dev",
         _ => "more",
     }
 }
@@ -776,14 +474,10 @@ fn grouped_catalog<'a>(
             apps.push(entry);
         }
     }
-
-    let mut out = Vec::new();
-    for (key, label, apps) in buckets {
-        if !apps.is_empty() {
-            out.push((key, label, apps));
-        }
-    }
-    out
+    buckets
+        .into_iter()
+        .filter(|(_, _, apps)| !apps.is_empty())
+        .collect()
 }
 
 fn internal_group_key(entry: &CatalogEntry) -> &'static str {
@@ -830,23 +524,6 @@ fn filter_catalog(catalog: &[CatalogEntry], q: &str) -> Vec<CatalogEntry> {
         .collect()
 }
 
-/// Render the app chiclets grouped into the fixed sections (Okta end-user dashboard layout).
-fn render_sections(catalog: &[CatalogEntry], statuses: &Statuses) -> String {
-    let mut out = String::new();
-    for (index, (key, label, apps)) in grouped_catalog(catalog).into_iter().enumerate() {
-        out.push_str(&render_app_section(
-            key,
-            key,
-            label,
-            &format!("{:02}", index + 1),
-            &apps,
-            statuses,
-            "public",
-        ));
-    }
-    out
-}
-
 fn render_dashboard_sections(
     catalog: &[CatalogEntry],
     mgmt: Option<&[CatalogEntry]>,
@@ -863,66 +540,64 @@ fn render_dashboard_sections(
             esc(search_query)
         );
     }
-    let mut out = render_sections(catalog, statuses);
+    let mut out = String::new();
+    for (key, label, apps) in grouped_catalog(catalog) {
+        out.push_str(&render_cluster(key, label, &apps, statuses));
+    }
     if let Some(mgmt) = mgmt {
         if !mgmt.is_empty() {
             out.push_str(&format!(
-                r#"<section class="internal-zone ody-foundry-panel" id="{id}" data-access-scope="internal" aria-labelledby="{id}-title"><header class="internal-zone__head"><p class="ody-index">BACKSTAGE / INTERNAL ZONE</p><h2 id="{id}-title">{label}</h2><p>{count} management surfaces · WireGuard boundary</p></header>"#,
+                r#"<section class="cluster cluster--internal" id="{id}" data-access-scope="internal" data-category="{label}" aria-labelledby="{id}-title" data-motion-enter><header class="cluster__head"><span class="cluster__dot" aria-hidden="true"></span><h2 id="{id}-title">{label}</h2><span class="cluster__lock" aria-hidden="true">{lock}</span><span class="pill pill-neutral">VPN</span></header><div class="cluster__groups">"#,
                 id = MGMT_SECTION_ID,
                 label = MGMT_SECTION_LABEL,
-                count = mgmt.len(),
+                lock = ICON_SHIELD,
             ));
-            for (index, (key, label, apps)) in
-                grouped_internal_catalog(mgmt).into_iter().enumerate()
-            {
-                out.push_str(&render_app_section(
+            for (key, label, apps) in grouped_internal_catalog(mgmt) {
+                out.push_str(&render_subcluster(
                     &format!("{MGMT_SECTION_ID}-{key}"),
-                    MGMT_SECTION_STYLE,
                     label,
-                    &format!("B{:02}", index + 1),
                     &apps,
                     statuses,
-                    "internal",
                 ));
             }
-            out.push_str("</section>");
+            out.push_str("</div></section>");
         }
     }
     out
 }
 
-fn render_app_section(
-    section_id: &str,
-    style_key: &str,
-    label: &str,
-    index: &str,
-    apps: &[&CatalogEntry],
-    statuses: &Statuses,
-    access_scope: &str,
-) -> String {
+/// One public category cluster: a dot in the category colour, the name, and the tile grid.
+fn render_cluster(key: &str, label: &str, apps: &[&CatalogEntry], statuses: &Statuses) -> String {
     let mut out = format!(
-        r#"<section class="appsec appsec--{style} ody-band" id="{id}" data-section data-access-scope="{access_scope}" aria-labelledby="{id}-title"><header class="appsec__head"><span class="ody-index">{index}</span><h2 id="{id}-title">{label}</h2><p>{count} {unit}</p></header><div class="appgrid ody-wall">"#,
-        style = style_key,
-        id = section_id,
+        r#"<section class="cluster cluster--{key}" id="{key}" data-section data-access-scope="public" aria-labelledby="{key}-title" data-category="{label}" data-motion-enter><header class="cluster__head"><span class="cluster__dot" aria-hidden="true"></span><h2 id="{key}-title">{label}</h2></header><div class="cluster__grid">"#,
+        key = key,
         label = esc(label),
-        count = apps.len(),
-        unit = if apps.len() == 1 {
-            "service"
-        } else {
-            "services"
-        },
-        index = esc(index),
-        access_scope = access_scope,
     );
     for entry in apps {
-        out.push_str(&render_app(entry, statuses, access_scope));
+        out.push_str(&render_app(entry, statuses, "public"));
     }
     out.push_str("</div></section>");
     out
 }
 
-/// One app chiclet: a category-tinted icon tile, the app name + description, and a live status
-/// dot (top-right). Coming-soon services show a "Soon" badge and an accent dot.
+/// One group inside the internal cluster (Observe / Protect / Ship / Network / Recover).
+fn render_subcluster(id: &str, label: &str, apps: &[&CatalogEntry], statuses: &Statuses) -> String {
+    let mut out = format!(
+        r#"<section class="subcluster" id="{id}" data-section data-access-scope="internal" data-category="{cat}" aria-labelledby="{id}-title"><h3 id="{id}-title">{label}</h3><div class="cluster__grid">"#,
+        id = id,
+        cat = MGMT_SECTION_LABEL,
+        label = esc(label),
+    );
+    for entry in apps {
+        out.push_str(&render_app(entry, statuses, "internal"));
+    }
+    out.push_str("</div></section>");
+    out
+}
+
+/// One tile: a category-tinted icon and the name. A degraded/down component adds a status
+/// ring on the icon; a coming-soon service shows a "Soon" tag instead. The description stays
+/// in the DOM (visually hidden) for search, the palette and the drawer.
 fn render_app(entry: &CatalogEntry, statuses: &Statuses, access_scope: &str) -> String {
     let cat = category_key(entry);
     let soon_badge = if entry.coming_soon {
@@ -951,7 +626,7 @@ fn render_app(entry: &CatalogEntry, statuses: &Statuses, access_scope: &str) -> 
     } else {
         statuses.status_of(&entry.component)
     };
-    // Lowercased name+description backs the client-side app search filter.
+    // Lowercased name+description backs the client-side search filter.
     let data_name = esc(&format!("{} {}", entry.name, entry.description).to_lowercase());
     let app_id = esc(&entry.url);
     let product_id = if entry.id.is_empty() {
@@ -972,11 +647,10 @@ fn render_app(entry: &CatalogEntry, statuses: &Statuses, access_scope: &str) -> 
     };
     format!(
         r#"<div class="appwrap" data-app-id="{id}" data-product-id="{product_id}" data-health="{health}" data-access-scope="{access_scope}">
-<a class="app app--{cat} ody-cell" href="{url}" title="{tooltip}" data-name="{dn}" data-app-id="{id}" data-product-id="{product_id}" data-health="{health}" data-access-scope="{access_scope}"{profile}>
-  {soon}
-  {status}
+<a class="app app--{cat}" href="{url}" title="{tooltip}" data-name="{dn}" data-app-id="{id}" data-product-id="{product_id}" data-health="{health}" data-access-scope="{access_scope}"{profile}>
   <span class="app__icon" aria-hidden="true">{icon}</span>
   <span class="app__name">{name}</span>
+  {status}{soon}
   <span class="app__desc">{desc}</span>
 </a>
 <button class="app__pin" type="button" data-pin-button data-app-id="{id}" aria-pressed="false" aria-label="{pin_label}" title="{pin_label}">
@@ -992,8 +666,8 @@ fn render_app(entry: &CatalogEntry, statuses: &Statuses, access_scope: &str) -> 
         url = esc(&entry.url),
         tooltip = tooltip,
         dn = data_name,
-        soon = soon_badge,
         status = status_span,
+        soon = soon_badge,
         icon = icon_for(&entry.name, &entry.icon),
         name = esc(&entry.name),
         desc = esc(&entry.description),
@@ -1002,104 +676,42 @@ fn render_app(entry: &CatalogEntry, statuses: &Statuses, access_scope: &str) -> 
     )
 }
 
-// --- Recent activity feed --------------------------------------------------------------
+// --- Inline glyphs ---------------------------------------------------------------------
 
-/// Render the recent-activity feed from the most recent audit events. Empty / unreachable
-/// Watchtower shows a calm placeholder rather than an error.
-fn render_activity(events: &[Event], now_secs: i64, disclose_target: bool) -> String {
-    if events.is_empty() {
-        return r#"<div class="feed__empty">No recent activity to show.</div>"#.to_string();
-    }
-    let mut out = String::new();
-    for ev in events {
-        let action = if ev.action.trim().is_empty() {
-            "event".to_string()
-        } else {
-            ev.action.clone()
-        };
-        let actor = if ev.actor.trim().is_empty() {
-            "system".to_string()
-        } else {
-            ev.actor.clone()
-        };
-        // Watchtower stamps `ts` in milliseconds; relative time works in seconds.
-        let when = rel_time(ev.ts / 1_000, now_secs);
-        let target = if !disclose_target || ev.target.trim().is_empty() {
-            String::new()
-        } else {
-            format!("{} · ", esc(&ev.target))
-        };
-        out.push_str(&format!(
-            r#"<div class="feed__item">
-  <span class="feed__dot {sev}" aria-hidden="true"></span>
-  <div class="feed__body">
-    <div class="feed__line"><span class="feed__action">{action}</span> <span class="feed__actor">{actor}</span></div>
-    <div class="feed__meta">{target}<span data-spark-reltime data-ts="{ts}">{when}</span></div>
-  </div>
-</div>"#,
-            sev = severity_dot_class(&ev.severity),
-            action = esc(&action),
-            actor = esc(&actor),
-            target = target,
-            ts = ev.ts / 1_000,
-            when = esc(&when),
-        ));
-    }
-    out
-}
-
-// --- Inline metric-card glyphs ---------------------------------------------------------
-
-const ICON_SYSTEMS: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="m8 10 2.5 2.5L16 7"/></svg>"##;
-const ICON_CPU: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>"##;
-const ICON_MEM: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M12 10v4M17 10v4"/></svg>"##;
-const ICON_AUDIT: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>"##;
-const ICON_LOAD: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M12 4V2M4 12H2M12 20v2M20 12h2M6 6 4.5 4.5M18 6l1.5-1.5"/><path d="m12 10 4-2"/></svg>"##;
 const ICON_STAR: &str = r##"<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 3 2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3Z"/></svg>"##;
+const ICON_CHECK: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>"##;
+const ICON_EXTERNAL: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/></svg>"##;
+const ICON_SHIELD: &str = r##"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>"##;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn full_document_embeds_the_exact_wire_fragment() {
+    fn render_pair(wire: bool) -> String {
         let catalog = crate::catalog::default_catalog();
         let snapshot = Snapshot::default();
-        let full = render(
+        render(
             CatalogView {
                 public: &catalog,
                 internal: None,
-                public_projection: None,
-                estate_projection: None,
             },
             "alice@steadholme.local",
             &snapshot,
             &snapshot.public_statuses,
-            (1_700_000_000, 8),
             "",
-            false,
-        );
-        let fragment = render(
-            CatalogView {
-                public: &catalog,
-                internal: None,
-                public_projection: None,
-                estate_projection: None,
-            },
-            "alice@steadholme.local",
-            &snapshot,
-            &snapshot.public_statuses,
-            (1_700_000_000, 8),
-            "",
-            true,
-        );
+            wire,
+        )
+    }
 
-        assert!(
-            fragment.starts_with(r#"<section class="estate-live" id="estate-live" role="region""#)
-        );
+    #[test]
+    fn live_region_is_embedded_and_served_alone_for_wire() {
+        let full = render_pair(false);
+        let fragment = render_pair(true);
+
+        assert!(fragment.starts_with(r#"<section class="live" id="estate-live" role="region""#));
         assert!(
             full.contains(&fragment),
-            "full SSR uses the fragment renderer byte-for-byte"
+            "the full document embeds the exact wire bytes"
         );
         assert!(!fragment.contains(r#"id="appsections""#));
         assert!(!fragment.contains("data-pin-button"));
@@ -1110,57 +722,25 @@ mod tests {
     }
 
     #[test]
-    fn external_access_map_describes_but_does_not_disclose_management_surfaces() {
-        let external = render_access_planes(22, None);
-        assert!(external.contains("22 product surfaces"));
-        assert!(external.contains("Anonymous, read-only"));
-        assert!(external.contains("https://status.w33d.xyz"));
-        assert!(external.contains("WireGuard required"));
-        assert!(!external.contains("management surfaces"));
-        assert!(!external.contains("vault.w33d.xyz"));
-
-        let internal = render_access_planes(22, Some(27));
-        assert!(internal.contains("27 management surfaces"));
-        assert!(internal.contains("Internal zone"));
+    fn tiles_carry_no_decorative_vocabulary() {
+        let full = render_pair(false);
+        assert!(full.contains(r#"<a class="app app--comms" href="https://mail.w33d.xyz""#));
         assert!(
-            !internal.contains("vault.w33d.xyz"),
-            "summary never invents a route list"
+            !full.contains("app__meta"),
+            "category text is not repeated under tiles"
         );
+        assert!(!full.contains("ody-index"), "no index codes");
+        assert!(!full.contains("ody-coordinate"), "no coordinates");
+        assert!(!full.contains("services</p>"), "no per-cluster counts");
     }
 
     #[test]
-    fn manifest_signal_discloses_only_the_identities_for_the_current_view() {
-        let public = ProjectionIdentity {
-            release: "1.0.0".to_string(),
-            fingerprint: format!("sha256:{}", "a".repeat(64)),
-        };
-        let estate = ProjectionIdentity {
-            release: "1.0.0".to_string(),
-            fingerprint: format!("sha256:{}", "b".repeat(64)),
-        };
-
-        let external = render_manifest_signal(Some(&public), None, 23);
-        assert!(external.contains(r#"data-manifest-surface-count="23""#));
-        assert!(external.contains(r#"data-manifest-audience="public""#));
-        assert!(external.contains(&public.fingerprint));
-        assert!(!external.contains(r#"data-manifest-audience="estate""#));
-        assert!(!external.contains(&estate.fingerprint));
-
-        let internal = render_manifest_signal(Some(&public), Some(&estate), 50);
-        assert!(internal.contains(r#"data-manifest-surface-count="50""#));
-        assert!(internal.contains(r#"data-manifest-audience="public""#));
-        assert!(internal.contains(r#"data-manifest-audience="estate""#));
-        assert!(internal.contains(&public.fingerprint));
-        assert!(internal.contains(&estate.fingerprint));
-    }
-
-    #[test]
-    fn only_the_exact_wire_header_requests_a_fragment() {
-        let mut headers = HeaderMap::new();
-        assert!(!wire_request(&headers));
-        headers.insert(HEADER_WIRE, HeaderValue::from_static("true"));
-        assert!(!wire_request(&headers));
-        headers.insert(HEADER_WIRE, HeaderValue::from_static("1"));
-        assert!(wire_request(&headers));
+    fn unreached_backends_render_placeholders_not_errors() {
+        let fragment = render_pair(true);
+        assert!(fragment.contains(r#"data-state="unknown""#));
+        assert!(fragment.contains(r#"<p class="chain" data-state="unknown">"#));
+        assert!(fragment.contains(r#"<span class="chain__count">—</span>"#));
+        assert!(fragment.contains(r#"<span class="meter__value">—</span>"#));
+        assert!(!fragment.contains("awaiting"), "no narrated placeholders");
     }
 }

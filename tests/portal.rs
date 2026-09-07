@@ -42,6 +42,15 @@ fn get_as(uri: &str, email: &str) -> Request<Body> {
         .unwrap()
 }
 
+fn get_wire_as(uri: &str, email: &str) -> Request<Body> {
+    Request::builder()
+        .uri(uri)
+        .header("X-Auth-Email", email)
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap()
+}
+
 fn get_as_zone(uri: &str, email: &str, zone: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
@@ -238,6 +247,30 @@ async fn healthz_ok() {
 }
 
 #[tokio::test]
+async fn versioned_stylesheet_is_publicly_cacheable() {
+    let state = build_dev_state();
+    let response = app(state).oneshot(get("/assets/portal-20260907.css")).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get("cache-control").unwrap(),
+        "public, max-age=31536000, immutable"
+    );
+    assert!(response
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("text/css"));
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let css = String::from_utf8_lossy(&bytes);
+    assert!(css.contains(".cluster__grid"));
+    assert!(!css.contains(".estate-planes"));
+}
+
+#[tokio::test]
 async fn dashboard_renders_full_command_center() {
     // Beacon: Identity operational, Gateway degraded -> 1 of 2 systems operational.
     let beacon = fake_service(&[(
@@ -271,6 +304,9 @@ async fn dashboard_renders_full_command_center() {
     let state = state_with(&beacon, &vitals, &watchtower);
     let (status, html) = call(&state, get_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
+    let (wire_status, estate_fragment) =
+        call(&state, get_wire_as("/", "alice@steadholme.local")).await;
+    assert_eq!(wire_status, StatusCode::OK);
 
     // Greeting uses the email local-part (capitalized) and exposes a stable identity hook;
     // the full email remains available in the account disclosure.
@@ -309,26 +345,26 @@ async fn dashboard_renders_full_command_center() {
         "personalization changes have an independent live region"
     );
 
-    // Live metric cards.
+    // Live region: fleet ring + host meters + chain verdict, embedded and wire-served alike.
     assert!(
-        html.contains("Systems online"),
-        "systems-online card present"
+        estate_fragment.contains(r#"data-state="degraded" data-up="1" data-total="2""#),
+        "live region carries the fleet rollup"
+    );
+    assert!(estate_fragment.contains("<b>1/2</b>"), "fleet readout shows 1/2");
+    assert!(estate_fragment.contains("42%"), "host CPU meter");
+    assert!(estate_fragment.contains("63%"), "host memory meter");
+    assert!(estate_fragment.contains("0.75"), "load meter");
+    assert!(
+        estate_fragment.contains(r#"<span class="chain__count">3 sealed</span>"#),
+        "chain length shown"
     );
     assert!(
-        html.contains(r#"1<span class="metric__unit">/2</span>"#),
-        "systems-online shows 1/2"
-    );
-    assert!(html.contains("42%"), "host CPU gauge");
-    assert!(html.contains("63%"), "host memory gauge");
-    assert!(html.contains("0.75"), "load average");
-    assert!(html.contains("Audit events"), "audit card present");
-    assert!(
-        html.contains("Chain verified"),
+        estate_fragment.contains("chain verified"),
         "audit chain shows verified"
     );
+    assert!(html.contains(&estate_fragment), "the full page embeds the live region");
 
-    // Services grid: representative public app tiles + their public subdomains (mgmt surfaces
-    // like Vitals/Audit are intentionally NOT on the public apex).
+    // Services grid: representative stable public product tiles and their primary subdomains.
     for (name, url) in [
         ("Identity", "https://sso.w33d.xyz"),
         ("Status", "https://status.w33d.xyz"),
@@ -340,6 +376,17 @@ async fn dashboard_renders_full_command_center() {
         ("Chat", "https://chat.w33d.xyz"),
         ("Search", "https://search.w33d.xyz"),
         ("Git", "https://git.w33d.xyz"),
+        ("CI", "https://ci.w33d.xyz"),
+        ("Cistern", "https://cistern.w33d.xyz"),
+        ("Sites", "https://siteflow.w33d.xyz"),
+        ("Atlas", "https://atlas.w33d.xyz"),
+        ("Events", "https://events.w33d.xyz"),
+        ("Vitals", "https://vitals.w33d.xyz"),
+        ("Access", "https://access.w33d.xyz"),
+        ("Account", "https://account.w33d.xyz"),
+        ("ComfyUI", "https://comfy.w33d.xyz"),
+        ("Studio", "https://studio.w33d.xyz"),
+        ("VPN enrollment", "https://vpn.w33d.xyz"),
     ] {
         assert!(html.contains(name), "{name} tile rendered");
         assert!(html.contains(url), "{name} links to {url}");
@@ -373,12 +420,12 @@ async fn dashboard_renders_full_command_center() {
         "only the degraded Status tile renders a status node"
     );
     assert!(
-        html.contains(r#"class="incidentbar incidentbar--warn""#),
-        "degraded Beacon state renders an incident banner"
+        estate_fragment.contains(r#"<li><span class="issues__name">Gateway</span><span class="pill pill-warn">Degraded</span></li>"#),
+        "the degraded component is listed by name in the Fleet card"
     );
     assert!(
-        html.contains("Gateway"),
-        "incident banner names the degraded component"
+        !estate_fragment.contains("reporting issues"),
+        "status is shown, not narrated"
     );
     assert!(
         html.contains(r#"title="Mail — SSO webmail"#),
@@ -405,12 +452,12 @@ async fn dashboard_renders_full_command_center() {
         "personal apps mount rendered"
     );
     assert!(
-        html.contains(r#"id="pinnedapps""#),
-        "pinned apps empty state rendered"
+        html.contains(r#"id="recentapps""#) && html.contains(r#"id="recentgrid""#),
+        "recent apps mount rendered"
     );
     assert!(
-        html.contains("Use the star on any service"),
-        "pinned apps empty state invites pinning"
+        html.contains(r#"id="pinnedapps""#),
+        "pinned apps empty state rendered"
     );
     assert!(
         html.contains(r#"id="cmdpalette" role="dialog""#),
@@ -437,13 +484,6 @@ async fn dashboard_renders_full_command_center() {
         "tiles include a pin control"
     );
 
-    // Recent-activity feed from Watchtower.
-    assert!(html.contains("login"), "activity feed shows the action");
-    assert!(
-        html.contains(r#"class="feed__item""#),
-        "activity feed rendered an item"
-    );
-
     // Logout points at the gateway on the issuer host (absolute, cross-subdomain).
     assert!(
         html.contains("https://sso.w33d.xyz/_gw/auth/logout"),
@@ -452,7 +492,68 @@ async fn dashboard_renders_full_command_center() {
 }
 
 #[tokio::test]
-async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() {
+async fn dashboard_spatial_desktop_preserves_progressive_enhancement_contract() {
+    let state = state_with(
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+        "http://127.0.0.1:1",
+    );
+    let (status, html) = call(&state, get_as("/", "alice@steadholme.local")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    assert!(html.contains("<title>Steadholme Portal</title>"));
+    assert!(html.contains(r#"<link rel="stylesheet" href="/assets/portal-20260907.css">"#));
+    assert!(!html.contains("<style>"));
+    assert!(html.contains(r#"<a class="top__brand" href="/" aria-label="Steadholme home">"#));
+    for forbidden in [">w33d<", ">W33D<", ">主权<", ">sovereign<", ">Sovereign<"] {
+        assert!(
+            !html.contains(forbidden),
+            "visible Portal branding excludes {forbidden}"
+        );
+    }
+    assert!(
+        !html.contains("{{"),
+        "the response must not expose unresolved template placeholders"
+    );
+
+    assert!(html.contains(r#"<div class="clusters" id="appsections">"#));
+    assert!(!html.contains(r#"id="tab-estate""#));
+    assert!(!html.contains(r#"id="view-estate""#));
+    assert!(!html.contains(r#"id="portaltabs""#));
+    assert!(html.contains(r#"<form class="command" role="search" method="get" action="/">"#));
+    assert!(html.contains(r#"id="appsearch" name="q""#));
+    assert!(html.contains(r#"id="app-drawer" role="dialog" aria-modal="true""#));
+    assert!(!html.contains(r#"class="dock""#), "no rail or dock chrome");
+    assert!(!html.contains("catalog-nav"), "clusters are visible without a category nav");
+    assert!(html.contains(r#"id="cmdpalette" role="dialog" aria-modal="true""#));
+
+    assert!(html.contains(
+        r#"id="ident" data-section data-access-scope="public" aria-labelledby="ident-title""#
+    ));
+    assert!(html.contains(r#"<h2 id="ident-title">Identity &amp; Security</h2>"#));
+    assert!(html.contains(r#"<a class="app app--comms" href="https://mail.w33d.xyz""#));
+    for attribute in [
+        r#"data-app-id="https://mail.w33d.xyz""#,
+        r#"data-product-id="mail""#,
+        r#"data-health="unknown""#,
+        r#"data-access-scope="public""#,
+    ] {
+        assert!(html.contains(attribute), "service nodes retain {attribute}");
+    }
+    assert!(html.contains(r#"<span class="app__icon" aria-hidden="true">"#));
+    assert!(html.contains(r#"<span class="app__name">Mail</span>"#));
+    assert!(!html.contains("app__meta"), "category text is not repeated under tiles");
+    assert!(html.contains(r#"<span class="app__desc">SSO webmail"#));
+    assert!(html.contains(r#"data-pin-button data-app-id="https://mail.w33d.xyz""#));
+
+    assert!(!html.contains("document.addEventListener('odyssey:swap'"));
+    assert!(!html.contains("document.addEventListener('wire:after'"));
+    assert!(!html.contains("dockButton('workspace'"));
+    assert!(!html.contains("dockButton('recent'"));
+}
+
+#[tokio::test]
+async fn dashboard_embeds_live_region_without_estate_narration() {
     let state = state_with(
         "http://127.0.0.1:1",
         "http://127.0.0.1:1",
@@ -477,74 +578,28 @@ async fn dashboard_estate_bridge_uses_odyssey_runtime_and_keeps_status_public() 
         "reduced-motion-aware polish is enabled"
     );
 
-    assert!(html.contains(r#"id="estate-live" role="region" aria-labelledby="estate-title""#));
-    assert!(html.contains("One estate, three trust paths"));
-    assert!(
-        html.contains(r#"data-public-surface-count="22""#),
-        "public count comes from Config catalog"
-    );
-
-    // Instrument strip in estate-live fragment.
-    assert!(
-        html.contains(r#"<div class="ody-instrument">"#),
-        "instrument strip rendered"
-    );
-    assert!(
-        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="unknown">"#),
-        "verify cell reports unknown while Watchtower is unreachable"
-    );
-    assert!(
-        html.contains(r#"<span class="ody-instrument__value">—</span>"#),
-        "unknown state shows em dash"
-    );
-    assert!(
-        html.contains(r#"<span class="ody-instrument__label">Verify</span>"#),
-        "verify label present"
-    );
-    assert!(
-        html.contains(r#"<span class="ody-instrument__label">CPU</span>"#),
-        "CPU label present"
-    );
-    assert!(
-        html.contains(r#"<span class="ody-instrument__label">Memory</span>"#),
-        "memory label present"
-    );
-    assert!(
-        html.contains(r#"<span class="ody-instrument__label">Load</span>"#),
-        "load label present"
-    );
-    assert!(
-        html.contains(r#"<span class="ody-instrument__label">Events</span>"#),
-        "events label present"
-    );
-    assert!(
-        html.contains(r#"<span class="ody-instrument__unit">%</span>"#),
-        "percentage unit present"
-    );
-
-    assert!(html.contains("Anonymous, read-only"));
-    assert!(html.contains(
-        "status.w33d.xyz</a> stays publicly readable; no Portal identity or WireGuard connection is required."
-    ));
-    assert!(html.contains("WireGuard required"));
-    assert!(html.contains("Fleet health"));
-    assert!(html.contains("Recent signals"));
-
-    // The only Wire canary is the isolated live snapshot. JS-owned catalog, pin and palette nodes
-    // are never replacement targets.
     assert_eq!(
-        html.matches(r##"data-wire-target="#estate-live""##).count(),
-        1
+        html.matches(r#"id="estate-live""#).count(),
+        1,
+        "the live region is embedded exactly once"
     );
-    assert!(html.contains(r##"data-wire-select="#estate-live""##));
-    assert!(html.contains(r#"data-wire-swap="outer""#));
+    for removed in [
+        r#"id="view-estate""#,
+        "Trust paths",
+        "Anonymous, read-only",
+        "WireGuard required",
+        r#"<h3 id="estate-health-title">Fleet health</h3>"#,
+        r#"<h3 id="estate-activity-title">Recent signals</h3>"#,
+    ] {
+        assert!(!html.contains(removed), "Portal shell still rendered {removed}");
+    }
     assert!(!html.contains(r##"data-wire-target="#appsections""##));
     assert!(
         !html.contains(r#"<form class="search" role="search" method="get" action="/" data-wire"#)
     );
 }
 
-/// The verify instrument cell maps Watchtower outcomes truthfully: unreachable is "unknown",
+/// The wire-only verify instrument maps Watchtower outcomes truthfully: unreachable is "unknown",
 /// verified is "operational", and reached-but-broken is an integrity failure — "down", never
 /// "degraded". Assertions match the full cell markup (not the bare attribute) because the
 /// embedded stylesheet itself contains `data-ody-status="..."` selector text.
@@ -556,14 +611,14 @@ async fn verify_status_branches_cover_unknown_operational_down() {
         "http://127.0.0.1:1",
         "http://127.0.0.1:1",
     );
-    let (status, html) = call(&state_unknown, get_as("/", "alice@steadholme.local")).await;
+    let (status, html) = call(&state_unknown, get_wire_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="unknown">"#),
+        html.contains(r#"<p class="chain" data-state="unknown">"#),
         "unreachable Watchtower maps to unknown"
     );
     assert!(
-        html.contains(r#"<span class="ody-instrument__value">—</span>"#),
+        html.contains(r#"<span class="chain__count">—</span>"#),
         "unknown state shows em dash"
     );
 
@@ -577,14 +632,14 @@ async fn verify_status_branches_cover_unknown_operational_down() {
     ])
     .await;
     let state_ok = state_with("http://127.0.0.1:1", "http://127.0.0.1:1", &watchtower_ok);
-    let (status, html) = call(&state_ok, get_as("/", "alice@steadholme.local")).await;
+    let (status, html) = call(&state_ok, get_wire_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="operational">"#),
+        html.contains(r#"<p class="chain" data-state="operational">"#),
         "verified chain maps to operational"
     );
     assert!(
-        html.contains(r#"<span class="ody-instrument__value">42</span>"#),
+        html.contains(r#"<span class="chain__count">42 sealed</span>"#),
         "operational state shows the chain count"
     );
 
@@ -602,20 +657,21 @@ async fn verify_status_branches_cover_unknown_operational_down() {
         "http://127.0.0.1:1",
         &watchtower_broken,
     );
-    let (status, html) = call(&state_broken, get_as("/", "alice@steadholme.local")).await;
+    let (status, html) = call(&state_broken, get_wire_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        html.contains(r#"<div class="ody-instrument__cell" data-ody-status="down">"#),
+        html.contains(r#"<p class="chain" data-state="down">"#),
         "broken chain must map to down"
     );
     assert!(
-        !html.contains(r#"<div class="ody-instrument__cell" data-ody-status="degraded">"#),
+        !html.contains(r#"<p class="chain" data-state="degraded">"#),
         "integrity failure is never softened to degraded"
     );
     assert!(
-        html.contains(r#"<span class="ody-instrument__value">99</span>"#),
+        html.contains(r#"<span class="chain__count">99 sealed</span>"#),
         "down state still shows the chain count"
     );
+    assert!(html.contains("integrity broken"));
 }
 
 #[tokio::test]
@@ -633,9 +689,7 @@ async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
     assert!(public_html.contains("Manifest Mail"));
     assert!(public_html.contains(r#"data-product-id="mail-web""#));
     assert!(public_html.contains(r#"data-ody-profile="control""#));
-    assert!(public_html.contains(r#"data-manifest-audience="public""#));
-    assert!(public_html.contains(r#"data-manifest-surface-count="1""#));
-    assert!(public_html.contains(&format!("sha256:{}", "a".repeat(64))));
+    assert!(!public_html.contains(r#"data-manifest-audience="public""#));
     for secret in [
         "Manifest Vault",
         "vault.w33d.xyz",
@@ -648,6 +702,20 @@ async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
             "external response leaked {secret}"
         );
     }
+
+    let external_wire = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Auth-Email", "alice@steadholme.local")
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap();
+    let (status, public_fragment) = call(&state, external_wire).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        !public_fragment.contains("data-manifest-audience") && !public_fragment.contains("sha256:"),
+        "the launcher no longer narrates manifest identities"
+    );
 
     let valid_sig = zone_signature("test-key", "w33d.xyz", "internal", current_minute());
     let internal = Request::builder()
@@ -663,11 +731,22 @@ async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
     assert!(internal_html.contains("Manifest Mail"));
     assert!(internal_html.contains("Manifest Vault"));
     assert!(internal_html.contains(r#"data-product-id="vault-ops""#));
-    assert!(internal_html.contains(r#"data-manifest-surface-count="2""#));
-    assert!(internal_html.contains(r#"data-manifest-audience="public""#));
-    assert!(internal_html.contains(r#"data-manifest-audience="estate""#));
-    assert!(internal_html.contains(&format!("sha256:{}", "a".repeat(64))));
-    assert!(internal_html.contains(&format!("sha256:{}", "b".repeat(64))));
+    assert!(!internal_html.contains(r#"data-manifest-audience="estate""#));
+    assert!(!internal_html.contains(&format!("sha256:{}", "b".repeat(64))));
+
+    let internal_wire = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Auth-Email", "alice@steadholme.local")
+        .header(HEADER_GATEWAY_ZONE, "internal")
+        .header(HEADER_GATEWAY_ZONE_SIG, valid_sig.clone())
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap();
+    let (status, internal_fragment) = call(&state, internal_wire).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!internal_fragment.contains("data-manifest-audience"));
+    assert!(!internal_fragment.contains(&format!("sha256:{}", "b".repeat(64))));
 
     let downgraded = [
         Request::builder()
@@ -705,7 +784,6 @@ async fn manifest_projection_and_host_bound_zone_signature_never_leak_estate() {
         assert!(!html.contains("Manifest Vault"));
         assert!(!html.contains("vault.w33d.xyz"));
         assert!(!html.contains(&format!("sha256:{}", "b".repeat(64))));
-        assert!(html.contains(&format!("sha256:{}", "a".repeat(64))));
     }
 }
 
@@ -776,11 +854,12 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
         .unwrap();
     let (status, external_html) = call(&state, external).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(external_html.contains("1 of 1 systems operational"));
-    assert!(external_html.contains(r#"1<span class="metric__unit">/1</span>"#));
-    assert!(!external_html.contains("reporting issues: CA"));
-    assert!(!external_html.contains("of 51 systems"));
-    assert!(!external_html.contains(r#"/51</span>"#));
+    assert!(external_html.contains(
+        r#"<span class="healthchip is-ok"><span class="dot"></span>1/1 up</span>"#
+    ));
+    assert!(external_html.contains("<b>1/1</b>"));
+    assert!(!external_html.contains(r#"<span class="issues__name">CA</span>"#));
+    assert!(!external_html.contains("50/51"));
     assert!(!external_html.contains("Internal-"));
 
     let external_wire = Request::builder()
@@ -792,9 +871,8 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
     let (status, external_fragment) = call(&state, external_wire).await;
     assert_eq!(status, StatusCode::OK);
     assert!(external_fragment.contains(r#"data-state="operational" data-up="1" data-total="1""#));
-    assert!(!external_fragment.contains("reporting issues: CA"));
-    assert!(!external_fragment.contains("of 51 systems"));
-    assert!(!external_fragment.contains(r#"/51</span>"#));
+    assert!(!external_fragment.contains(r#"<span class="issues__name">CA</span>"#));
+    assert!(!external_fragment.contains("50/51"));
     assert!(!external_fragment.contains("Internal-"));
 
     let signature = zone_signature("test-key", "w33d.xyz", "internal", current_minute());
@@ -803,14 +881,28 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
         .header("Host", "w33d.xyz")
         .header("X-Auth-Email", "alice@steadholme.local")
         .header(HEADER_GATEWAY_ZONE, "internal")
-        .header(HEADER_GATEWAY_ZONE_SIG, signature)
+        .header(HEADER_GATEWAY_ZONE_SIG, signature.clone())
         .body(Body::empty())
         .unwrap();
     let (status, internal_html) = call(&state, internal).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(internal_html.contains("50 of 51 systems operational"));
-    assert!(internal_html.contains("reporting issues: CA"));
-    assert!(internal_html.contains(r#"50<span class="metric__unit">/51</span>"#));
+    assert!(internal_html.contains(
+        r#"<span class="healthchip is-warn"><span class="dot"></span>50/51 up</span>"#
+    ));
+
+    let internal_wire = Request::builder()
+        .uri("/")
+        .header("Host", "w33d.xyz")
+        .header("X-Auth-Email", "alice@steadholme.local")
+        .header(HEADER_GATEWAY_ZONE, "internal")
+        .header(HEADER_GATEWAY_ZONE_SIG, signature)
+        .header("X-Wire", "1")
+        .body(Body::empty())
+        .unwrap();
+    let (status, internal_fragment) = call(&state, internal_wire).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(internal_fragment.contains(r#"<li><span class="issues__name">CA</span><span class="pill pill-down">Down</span></li>"#));
+    assert!(internal_fragment.contains("<b>50/51</b>"));
 
     let (status, ops_html) = call(
         &state,
@@ -818,8 +910,9 @@ async fn beacon_scopes_keep_operator_components_out_of_external_full_and_wire() 
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(ops_html.contains(r#"class="au-src" title="Down">CA</td>"#));
-    assert!(ops_html.contains("Internal-49"));
+    assert!(ops_html.contains("50/51"), "the ops strip reads the operator projection");
+    assert!(ops_html.contains(r#"<span class="cell__unit">CA down</span>"#));
+    assert!(!ops_html.contains("Internal-49"), "no per-service health list on /ops");
 }
 
 #[tokio::test]
@@ -858,7 +951,7 @@ async fn dashboard_wire_response_is_exact_read_only_live_region() {
     let fragment = String::from_utf8_lossy(&bytes);
 
     assert!(fragment.starts_with(
-        r#"<section class="estate-live" id="estate-live" role="region" aria-labelledby="estate-title""#
+        r#"<section class="live" id="estate-live" role="region" aria-label="Live""#
     ));
     assert!(fragment.contains(r#"data-access-scope="public""#));
     assert!(
@@ -867,17 +960,8 @@ async fn dashboard_wire_response_is_exact_read_only_live_region() {
     );
     assert!(fragment.contains(r#"data-wire="get""#));
     assert!(fragment.contains(r##"data-wire-target="#estate-live""##));
-    assert!(fragment.contains(r#"data-spark-reltime"#) || fragment.contains("No recent activity"));
-
-    // Instrument strip in Wire fragment.
-    assert!(
-        fragment.contains(r#"<div class="ody-instrument">"#),
-        "instrument strip in Wire fragment"
-    );
-    assert!(
-        fragment.contains(r#"<span class="ody-instrument__label">Verify</span>"#),
-        "instrument labels in fragment"
-    );
+    assert!(fragment.contains(r#"<article class="pcard pcard--fleet""#), "fleet card in the fragment");
+    assert!(fragment.contains(r#"<div class="meters">"#), "host meters in the fragment");
 
     assert!(!fragment.contains("<!DOCTYPE html>"));
     assert!(!fragment.contains(r#"id="appsections""#));
@@ -917,8 +1001,8 @@ async fn dashboard_external_wire_fragment_hides_audit_event_targets() {
         .unwrap();
     let (external_status, external_fragment) = call(&state, external).await;
     assert_eq!(external_status, StatusCode::OK);
-    assert!(external_fragment.contains("Recent signals"));
-    assert!(external_fragment.contains("probe"));
+    assert!(external_fragment.contains("<b>1</b>events"), "only the event count reaches the launcher");
+    assert!(!external_fragment.contains("probe"));
     assert!(
         !external_fragment.contains("vault.w33d.xyz"),
         "external fragments must not disclose arbitrary audit targets"
@@ -934,8 +1018,8 @@ async fn dashboard_external_wire_fragment_hides_audit_event_targets() {
     let (internal_status, internal_fragment) = call(&state, internal).await;
     assert_eq!(internal_status, StatusCode::OK);
     assert!(
-        internal_fragment.contains("vault.w33d.xyz"),
-        "the gateway-attested internal view keeps useful audit targets"
+        !internal_fragment.contains("vault.w33d.xyz") && !internal_fragment.contains("probe"),
+        "audit events are read on /ops, never narrated on the launcher"
     );
 }
 
@@ -983,10 +1067,22 @@ async fn dashboard_incident_banner_uses_down_variant() {
 
     let (status, html) = call(&state, get_as("/", "alice@steadholme.local")).await;
     assert_eq!(status, StatusCode::OK);
+    let (wire_status, fragment) = call(&state, get_wire_as("/", "alice@steadholme.local")).await;
+    assert_eq!(wire_status, StatusCode::OK);
     assert!(
-        html.contains(r#"class="incidentbar incidentbar--down""#),
-        "any down component escalates the incident banner"
+        fragment.contains(r#"data-state="down" data-up="0" data-total="2""#),
+        "any down component escalates the live region state"
     );
+    assert!(
+        fragment.contains(r#"<li><span class="issues__name">Identity</span><span class="pill pill-down">Down</span></li>"#)
+            && fragment.contains(r#"<li><span class="issues__name">Gateway</span><span class="pill pill-warn">Degraded</span></li>"#),
+        "every non-operational component is listed by name with its status"
+    );
+    assert!(
+        fragment.contains(r#"class="ring__dot ring__dot--down""#),
+        "the ring marks the down component"
+    );
+    assert!(!fragment.contains("incidentbar"), "no incident prose");
     assert!(
         html.contains(r#"title="Down""#),
         "down tiles keep a title channel"
@@ -1052,24 +1148,23 @@ async fn dashboard_internal_gateway_zone_renders_mgmt_consoles() {
     assert_eq!(status, StatusCode::OK);
 
     assert!(
-        html.contains(r##"href="#infraops" data-spy="infraops""##),
-        "internal sidebar links to the mgmt section"
-    );
-    assert!(
         html.contains(r#"id="infraops" data-access-scope="internal""#),
-        "internal mgmt section rendered"
+        "internal mgmt cluster rendered"
     );
     assert!(
-        html.contains("Infrastructure &amp; Operations"),
-        "mgmt section title is escaped and visible"
+        html.contains(r#"<h2 id="infraops-title">Internal</h2>"#),
+        "the internal cluster is named, not narrated"
     );
     assert!(
-        html.contains(r#"data-internal-surface-count="27""#),
-        "all internal consoles are represented in the attested view"
+        html.contains(r#"<span class="pill pill-neutral">VPN</span>"#),
+        "the VPN boundary is a pill, not a sentence"
     );
     assert!(
-        html.contains("27 management surfaces")
-            && html.contains("Observe")
+        !html.contains("management surfaces") && !html.contains("WireGuard boundary"),
+        "no counts or boundary prose"
+    );
+    assert!(
+        html.contains("Observe")
             && html.contains("Protect")
             && html.contains("Network")
             && html.contains("Recover"),
@@ -1136,23 +1231,17 @@ async fn dashboard_public_gateway_zone_is_byte_identical_without_mgmt() {
     );
 
     for forbidden in [
-        "Infrastructure &amp; Operations",
-        "27 management surfaces",
+        r#"id="infraops""#,
+        r#"<h2 id="infraops-title">Internal</h2>"#,
         "https://authz.w33d.xyz",
         "https://vault.w33d.xyz",
-        "https://vpn.w33d.xyz",
-        r##"href="#infraops" data-spy="infraops""##,
     ] {
         assert!(
             !missing.contains(forbidden),
             "{forbidden} is absent from public dashboard"
         );
     }
-    assert!(
-        missing.contains("WireGuard required")
-            && missing.contains("Management hostnames stay hidden"),
-        "external users see the access contract without internal route disclosure"
-    );
+    assert!(missing.contains(r#"data-access-scope="public""#));
 }
 
 #[tokio::test]
@@ -1185,24 +1274,26 @@ async fn dashboard_is_resilient_when_all_backends_down() {
         "down Beacon does not render tile status nodes"
     );
     assert!(
-        html.contains("—"),
-        "missing metrics render the em-dash placeholder"
+        !html.contains(r#"<div class="ody-instrument""#),
+        "the Portal shell omits infrastructure metrics"
+    );
+    let (wire_status, fragment) = call(&state, get_wire_as("/", "bob@steadholme.local")).await;
+    assert_eq!(wire_status, StatusCode::OK);
+    assert!(
+        fragment.contains(r#"data-state="unknown" data-up="0" data-total="0""#),
+        "fleet degrades to unknown"
     );
     assert!(
-        html.contains("awaiting Beacon"),
-        "systems card degrades gracefully"
+        fragment.contains(r#"<span class="meter__value">—</span>"#),
+        "meters render the em-dash placeholder"
     );
     assert!(
-        html.contains("awaiting Vitals"),
-        "gauges degrade gracefully"
+        fragment.contains(r#"<p class="chain" data-state="unknown"><svg"#) && fragment.contains(r#"<span class="chain__count">—</span>"#),
+        "chain degrades gracefully"
     );
     assert!(
-        html.contains("awaiting Watchtower"),
-        "audit card degrades gracefully"
-    );
-    assert!(
-        html.contains("No recent activity"),
-        "empty activity feed placeholder"
+        !fragment.contains("awaiting"),
+        "placeholders are values, not narration"
     );
     // App tiles still render regardless of backend health (status just degrades to Unknown).
     assert!(
@@ -1302,13 +1393,13 @@ async fn ops_console_renders_for_admin() {
     );
     assert!(
         html.contains(
-            r#"<section class="sys" id="audit" aria-label="Audit viewer" tabindex="-1">"#
+            r#"<section class="stream" id="audit" aria-label="Audit" tabindex="-1" data-chain="ok">"#
         ),
-        "audit section accepts programmatic focus"
+        "audit section accepts programmatic focus and carries the chain verdict"
     );
 
-    // Landmarks: the content region is a real <main>, and the workbench is a plain div so
-    // the topbar stays the document's only <header> (single banner).
+    // Landmarks: the content region is a real <main>, and the top row is the document's only
+    // <header> (single banner).
     assert!(
         html.contains(r#"<main class="content" id="top">"#),
         "content region is a real main landmark"
@@ -1319,27 +1410,23 @@ async fn ops_console_renders_for_admin() {
         "exactly one header element remains"
     );
     assert!(
-        html.contains(r#"<header class="topbar">"#),
-        "the sole header is the topbar"
+        html.contains(r#"<header class="top">"#),
+        "the sole header is the top row"
+    );
+    assert!(
+        html.contains(r#"<nav class="seg" aria-label="Views">"#),
+        "views switch with one segmented control"
     );
 
-    // Workbench block instead of dash-hero.
-    assert!(
-        html.contains(r#"<div class="ops-workbench">"#),
-        "ops workbench block rendered"
-    );
-    assert!(
-        !html.contains(r#"<header class="ops-workbench">"#),
-        "workbench no longer claims a banner header"
-    );
-    assert!(
-        html.contains("OPERATOR CONSOLE"),
-        "coordinate vocabulary present"
-    );
-    assert!(
-        !html.contains(r#"<div class="dash-hero">"#),
-        "dash-hero removed"
-    );
+    // No decorative vocabulary: no coordinates, lede, footer or source attributions.
+    for forbidden in ["OPERATOR CONSOLE", "ops-workbench", "Live from", "Read-only", "Cross-service audit"] {
+        assert!(!html.contains(forbidden), "{forbidden} is gone");
+    }
+
+    // Summary strip: chain, fleet (operator projection), gauges, matching events.
+    assert!(html.contains(r#"<span class="cell__label">Fleet</span><span class="cell__value">1/2<span class="cell__unit">Gateway degraded</span></span>"#));
+    assert!(html.contains(r#"<span class="cell__label">Chain</span><span class="cell__value">7<span class="cell__unit">sealed</span></span>"#));
+    assert!(html.contains(r#"<span class="cell__label">Events</span><span class="cell__value">2<span class="cell__unit">matching</span></span>"#));
 
     // Reduced-motion guard in script.
     assert!(
@@ -1351,10 +1438,10 @@ async fn ops_console_renders_for_admin() {
         "scrollIntoView uses reduced-motion check"
     );
 
-    // Audit viewer: verify summary + per-event rows (source/actor/action all present).
+    // Audit stream: verify summary + per-event rows (source/actor/action all present).
     assert!(
-        html.contains("Cross-service audit"),
-        "audit section rendered"
+        html.contains(r#"<li class="au-day">"#),
+        "rows are grouped under a day label"
     );
     assert!(
         html.contains("7 sealed"),
@@ -1369,17 +1456,9 @@ async fn ops_console_renders_for_admin() {
         "severity filter key on the row"
     );
 
-    // Per-service health table: name + status + uptime.
-    assert!(html.contains("Service health"), "health section rendered");
-    assert!(
-        html.contains("Identity"),
-        "component name in the health table"
-    );
-    assert!(html.contains("99.98%"), "component 24h uptime rendered");
-    assert!(
-        html.contains("Operational"),
-        "live status pill in the health table"
-    );
+    // Service health is Beacon's surface: no per-service table on /ops.
+    assert!(!html.contains("Service health"), "no health section");
+    assert!(!html.contains("99.98%"), "no per-service uptime");
 
     // Host metrics from Vitals.
     assert!(html.contains("Host CPU"), "host metric tiles present");
@@ -1411,9 +1490,10 @@ async fn ops_console_resilient_when_backends_down() {
         "empty audit placeholder"
     );
     assert!(
-        html.contains("Beacon has not reported component health yet."),
-        "empty health placeholder"
+        html.contains(r#"<span class="cell__label">Fleet</span><span class="cell__value">—</span>"#),
+        "fleet cell degrades to a dash"
     );
+    assert!(html.contains("Watchtower —"), "chain summary degrades to a dash");
 }
 
 /// Fake Watchtower with three distinct sealed events (different sources/actors/actions and

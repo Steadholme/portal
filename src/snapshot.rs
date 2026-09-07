@@ -7,6 +7,7 @@
 //! ("unknown"/"—"/empty) and never blocks the others. The whole result is cached for
 //! [`CACHE_TTL`], so back-to-back loads share one refresh.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -62,6 +63,7 @@ type Cached = Mutex<Option<(Instant, Arc<Snapshot>)>>;
 pub struct SnapshotCache {
     ttl: Duration,
     inner: Arc<Cached>,
+    refreshing: Arc<AtomicBool>,
 }
 
 impl SnapshotCache {
@@ -70,20 +72,65 @@ impl SnapshotCache {
         SnapshotCache {
             ttl,
             inner: Arc::new(Mutex::new(None)),
+            refreshing: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    /// Return the live snapshot, serving a cached one while it is fresh and otherwise
-    /// refetching every backend concurrently. The lock is never held across the network
-    /// `.await`, so concurrent page loads stay non-blocking.
+    /// Populate the cache before accepting production traffic.
+    pub async fn warm(&self, config: &Config) {
+        let fresh = Arc::new(Snapshot::fetch(config).await);
+        *self.inner.lock().unwrap() = Some((Instant::now(), fresh));
+    }
+
+    /// Return the live snapshot. A stale snapshot is served immediately while one background
+    /// refresh fetches every backend concurrently. An empty cache fetches synchronously; the
+    /// production startup path calls [`Self::warm`] so user traffic does not pay that cost.
     pub async fn get(&self, config: &Config) -> Arc<Snapshot> {
         if let Some((at, snap)) = self.inner.lock().unwrap().as_ref() {
             if at.elapsed() < self.ttl {
                 return Arc::clone(snap);
             }
+            let stale = Arc::clone(snap);
+            if self
+                .refreshing
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                let cache = self.clone();
+                let config = config.clone();
+                tokio::spawn(async move {
+                    let fresh = Arc::new(Snapshot::fetch(&config).await);
+                    *cache.inner.lock().unwrap() = Some((Instant::now(), fresh));
+                    cache.refreshing.store(false, Ordering::Release);
+                });
+            }
+            return stale;
         }
         let fresh = Arc::new(Snapshot::fetch(config).await);
         *self.inner.lock().unwrap() = Some((Instant::now(), Arc::clone(&fresh)));
         fresh
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn stale_snapshot_returns_without_waiting_for_backend_refresh() {
+        let cache = SnapshotCache::new(Duration::ZERO);
+        let stale = Arc::new(Snapshot::default());
+        *cache.inner.lock().unwrap() = Some((Instant::now(), Arc::clone(&stale)));
+
+        let mut config = Config::dev();
+        config.beacon_public_url = "http://127.0.0.1:1".to_string();
+        config.beacon_url = "http://127.0.0.1:1".to_string();
+        config.vitals_url = "http://127.0.0.1:1".to_string();
+        config.watchtower_url = "http://127.0.0.1:1".to_string();
+
+        let returned = tokio::time::timeout(Duration::from_millis(100), cache.get(&config))
+            .await
+            .expect("a stale snapshot must be returned immediately");
+        assert!(Arc::ptr_eq(&returned, &stale));
     }
 }

@@ -9,6 +9,7 @@
 //! Endpoints:
 //! - `GET /`         the dashboard (SSO-fronted; reads `X-Auth-Email`)
 //! - `GET /ops`      the admin-gated read-only operator console (`X-Auth-Groups` ∩ admins)
+//! - `GET /assets/portal-20260907.css` immutable shared design-system stylesheet
 //! - `GET /healthz`  liveness (public; used by the container HEALTHCHECK)
 
 pub mod auth;
@@ -45,6 +46,7 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/", get(handlers::dashboard::dashboard))
         .route("/ops", get(handlers::ops::ops))
+        .route(handlers::APP_CSS_PATH, get(handlers::app_css_asset))
         .route("/healthz", get(handlers::health::healthz))
         // Reject a forged gateway identity (spoofed X-Auth-* from a rogue in-network peer):
         // when GATEWAY_HMAC_KEY is set, an injected identity MUST carry a valid X-Auth-Sig.
@@ -84,9 +86,11 @@ pub fn build_dev_state() -> AppState {
 /// (env overrides plus the optional, paired Experience projections). Production projection IO
 /// and contract validation happen here and fail startup closed; async keeps the shared main seam.
 pub async fn build_state_from_env() -> Result<AppState, String> {
-    let config = Config::from_env()?;
+    let config = Arc::new(Config::from_env()?);
+    let cache = SnapshotCache::new(CACHE_TTL);
+    cache.warm(&config).await;
     Ok(AppState {
-        config: Arc::new(config),
-        cache: SnapshotCache::new(CACHE_TTL),
+        config,
+        cache,
     })
 }

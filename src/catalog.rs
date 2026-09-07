@@ -46,11 +46,9 @@ pub struct CatalogEntry {
     pub coming_soon: bool,
 }
 
-/// The built-in Steadholme **public** apex catalog: only the user-facing app surfaces that are
-/// actually reachable through the public gateway. Ops/mgmt surfaces (Vitals, Audit, Vault,
-/// Backup, CI, DNS, …) are deliberately EXCLUDED — post network-zoning they are VPN-only and
-/// return 404 to the public, so they never belong on a public launcher. Each tile maps to a
-/// Beacon component name (mirrors the deploy's `BEACON_SEED`) so the live status pill resolves.
+/// The built-in Steadholme **public** apex catalog: stable product surfaces that are reachable
+/// through the public gateway. Internal-only consoles and aliases are deliberately excluded.
+/// Each tile maps to a Beacon component name when a matching check exists.
 ///
 /// The list is curated from a per-service audit of the real product surface (every entry below
 /// is a verified working feature, not a routed placeholder). An operator may still override the
@@ -83,6 +81,8 @@ pub fn default_catalog() -> Vec<CatalogEntry> {
         e("Comments", "https://comments.w33d.xyz", "Embeddable threaded comments with moderation.", "Comments", "comments"),
         e("Paste", "https://paste.w33d.xyz", "Pastebin with expiry and burn-after-read snippets.", "Pastefire", "paste"),
         e("Drive", "https://drive.w33d.xyz", "Image/file host with unguessable share links.", "Drive", "drive"),
+        e("CanvasMind", "https://canvas.w33d.xyz", "AI-native canvas for visual reports.", "Canvas", "canvas"),
+        e("Heartlines", "https://relation.w33d.xyz", "Relationship constellations with on-device editing.", "Relation", "relation"),
         // --- Reading ---
         e("Feeds", "https://rss.w33d.xyz", "RSS/Atom river reader with local TL;DRs.", "Feeds", "rss"),
         e("Clips", "https://clip.w33d.xyz", "Read-it-later clipper with a clean reader view.", "Clips", "clip"),
@@ -92,12 +92,24 @@ pub fn default_catalog() -> Vec<CatalogEntry> {
         e("Assistant", "https://ami.w33d.xyz", "Personal AI chat plus replayable AI workflows.", "Familiar", "assistant"),
         e("AI Gateway", "https://ai.w33d.xyz", "OpenAI-compatible LLM gateway and API-key console.", "Relay", "ai"),
         e("Multica", "https://multica.w33d.xyz", "Managed coding-agent workspace with issues, runtimes and reusable skills.", "Multica", "ai"),
+        e("ComfyUI", "https://comfy.w33d.xyz", "Node-based image generation workspace.", "ComfyUI", "ai"),
+        e("Studio", "https://studio.w33d.xyz", "Model workspace and runtime controls.", "Studio", "ai"),
         // --- Developer ---
         e("Git", "https://git.w33d.xyz", "Self-hosted git forge with issues and pull requests.", "Git", "git"),
         e("Registry", "https://registry.w33d.xyz", "OCI/Docker container registry.", "Registry", "registry"),
+        e("CI", "https://ci.w33d.xyz", "Build pipelines, runs and supply-chain checks.", "Anvil", "ci"),
+        e("Cistern", "https://cistern.w33d.xyz", "Managed Postgres projects, data and storage.", "Cistern", "database"),
+        e("Sites", "https://siteflow.w33d.xyz", "Git-to-deploy builds, previews and rollbacks.", "SiteFlow", "sites"),
+        e("Events", "https://events.w33d.xyz", "Durable event streams and CDC-backed routing.", "Events", "events"),
+        e("Atlas", "https://atlas.w33d.xyz", "Developer portal and service catalog.", "Atlas", "atlas"),
+        e("Odyssey", "https://odyssey.w33d.xyz", "Design foundation and component reference.", "Odyssey UI", "odyssey"),
         // --- Platform ---
+        e("Access", "https://access.w33d.xyz", "Access requests, approvals and reviews.", "Access", "identity"),
+        e("Account", "https://account.w33d.xyz", "Profile, sessions and security settings.", "Identity", "identity"),
         e("Identity", "https://sso.w33d.xyz", "Single sign-on, passkeys and account.", "Identity", "identity"),
+        e("VPN enrollment", "https://vpn.w33d.xyz", "WireGuard credential enrollment and bootstrap access.", "Mycelium", "mesh"),
         e("Status", "https://status.w33d.xyz", "Live service status and uptime.", "Gateway", "status"),
+        e("Vitals", "https://vitals.w33d.xyz", "Host metrics and telemetry drilldown.", "Vitals", "vitals"),
     ]
 }
 
@@ -122,29 +134,23 @@ pub fn mgmt_catalog() -> Vec<CatalogEntry> {
         e("Directory", "https://people.w33d.xyz", "People, groups and account directory controls.", "People", "people"),
         e("Vault", "https://vault.w33d.xyz", "Secrets, leases and encryption policy console.", "Vault", "vault"),
         e("Audit log", "https://audit.w33d.xyz", "Tamper-evident audit search and investigation trail.", "Audit", "audit"),
-        e("Vitals", "https://vitals.w33d.xyz", "Host metrics, resource gauges and telemetry drilldown.", "Vitals", "vitals"),
         e("Logs", "https://logs.w33d.xyz", "Centralized logs with search, filters and live tail.", "Sift", "logs"),
         e("Traces", "https://traces.w33d.xyz", "Distributed tracing and request-path diagnostics.", "Filament", "traces"),
         e("DNS", "https://dns.w33d.xyz", "Authoritative DNS zones, records and split-horizon controls.", "Lodestar", "dns"),
         e("Backup", "https://backup.w33d.xyz", "Backup snapshots, retention policy and restore verification.", "Backup", "backup"),
-        e("CI", "https://ci.w33d.xyz", "Build pipelines, runs and supply-chain checks.", "Anvil", "ci"),
         e("Deploy", "https://deploy.w33d.xyz", "Release rollout, routing and rollback controls.", "Skiff", "skiff"),
-        e("Sites", "https://siteflow.w33d.xyz", "Git-to-deploy site builds, previews and rollbacks.", "SiteFlow", "sites"),
         e("Egress", "https://egress.w33d.xyz", "Outbound proxy policy, reputation and audit controls.", "Estuary", "estuary"),
         e("Mesh", "https://mesh.w33d.xyz", "WireGuard mesh peers, ACLs and device enrollment.", "Mycelium", "mesh"),
         e("Edge", "https://edge.w33d.xyz", "Static edge cache, purge and asset delivery controls.", "Eddy", "edge"),
         e("SPIFFE", "https://spiffe.w33d.xyz", "Workload identity, SVIDs and trust bundle management.", "Sigil", "sigil"),
         e("Risk", "https://risk.w33d.xyz", "Continuous access risk scoring and session signals.", "Pulse", "pulse"),
-        e("Events", "https://events.w33d.xyz", "Durable event streams and CDC-backed routing.", "Events", "events"),
         e("Jobs", "https://jobs.w33d.xyz", "Scheduled jobs, queues and worker run history.", "Jobs", "jobs"),
         e("Intel", "https://intel.w33d.xyz", "Threat intel, IOC graph and reputation lookups.", "Intel", "intel"),
         e("Guard", "https://guard.w33d.xyz", "Content moderation, policy scoring and safety verdicts.", "Warden", "guard"),
         e("Purple", "https://purple.w33d.xyz", "Continuous validation of detections and attack simulations.", "Phantom", "phantom"),
-        e("Atlas", "https://atlas.w33d.xyz", "Internal developer portal and service catalog.", "Atlas", "atlas"),
         e("RCA", "https://rca.w33d.xyz", "Root-cause investigations across metrics, logs and traces.", "RCA", "rca"),
         e("Detonate", "https://detonate.w33d.xyz", "Sandboxed sample analysis, verdicts and IOC extraction.", "Crucible", "crucible"),
         e("Canary", "https://canary.w33d.xyz", "Canary tokens, honeypots and uptime tripwires.", "Canary", "canary"),
-        e("VPN enrollment", "https://vpn.w33d.xyz", "WireGuard credential enrollment and bootstrap access.", "Mycelium", "mesh"),
     ]
 }
 
@@ -170,7 +176,7 @@ mod tests {
     #[test]
     fn default_catalog_is_public_apps_only() {
         let cat = default_catalog();
-        assert_eq!(cat.len(), 22, "curated public app catalog");
+        assert_eq!(cat.len(), 36, "curated public app catalog");
 
         let identity = cat.iter().find(|e| e.name == "Identity").expect("Identity tile");
         assert_eq!(identity.url, "https://sso.w33d.xyz");
@@ -190,16 +196,18 @@ mod tests {
         for name in [
             "Blog", "Forum", "Wiki", "Comments", "Paste", "Drive", "Feeds", "Clips", "Social",
             "Search", "Assistant", "AI Gateway", "Chat", "Calendar", "Notifications", "Inbox",
-            "Multica", "Git", "Registry",
+            "Multica", "Git", "Registry", "CanvasMind", "Heartlines", "Odyssey", "Access",
+            "Account", "CI", "Cistern", "ComfyUI", "Sites", "Studio", "VPN enrollment",
+            "Atlas", "Events", "Vitals",
         ] {
             assert!(cat.iter().any(|e| e.name == name), "{name} tile present");
         }
 
-        // VPN-only mgmt surfaces must NOT be advertised on the public apex.
+        // Internal-only management surfaces must NOT be advertised on the public apex.
         for host in [
-            "vault", "audit", "vitals", "backup", "rca", "traces", "ci", "atlas", "guard", "mesh",
-            "spiffe", "deploy", "egress", "purple", "logs", "dns", "people", "authz", "risk",
-            "intel", "canary", "edge", "events", "jobs", "detonate", "vpn",
+            "vault", "audit", "backup", "rca", "traces", "guard", "mesh", "spiffe", "deploy",
+            "egress", "purple", "logs", "dns", "people", "authz", "risk", "intel", "canary",
+            "edge", "jobs", "detonate",
         ] {
             let url = format!("https://{host}.w33d.xyz");
             assert!(
@@ -218,36 +226,30 @@ mod tests {
     #[test]
     fn mgmt_catalog_is_internal_ops_consoles_only() {
         let cat = mgmt_catalog();
-        assert_eq!(cat.len(), 27, "curated internal management catalog");
+        assert_eq!(cat.len(), 21, "curated internal management catalog");
 
         for (host, name, component) in [
             ("authz", "Authorization", "Authz"),
             ("people", "Directory", "People"),
             ("vault", "Vault", "Vault"),
             ("audit", "Audit log", "Audit"),
-            ("vitals", "Vitals", "Vitals"),
             ("logs", "Logs", "Sift"),
             ("traces", "Traces", "Filament"),
             ("dns", "DNS", "Lodestar"),
             ("backup", "Backup", "Backup"),
-            ("ci", "CI", "Anvil"),
             ("deploy", "Deploy", "Skiff"),
-            ("siteflow", "Sites", "SiteFlow"),
             ("egress", "Egress", "Estuary"),
             ("mesh", "Mesh", "Mycelium"),
             ("edge", "Edge", "Eddy"),
             ("spiffe", "SPIFFE", "Sigil"),
             ("risk", "Risk", "Pulse"),
-            ("events", "Events", "Events"),
             ("jobs", "Jobs", "Jobs"),
             ("intel", "Intel", "Intel"),
             ("guard", "Guard", "Warden"),
             ("purple", "Purple", "Phantom"),
-            ("atlas", "Atlas", "Atlas"),
             ("rca", "RCA", "RCA"),
             ("detonate", "Detonate", "Crucible"),
             ("canary", "Canary", "Canary"),
-            ("vpn", "VPN enrollment", "Mycelium"),
         ] {
             let entry = cat.iter().find(|e| e.url == format!("https://{host}.w33d.xyz"));
             let entry = entry.unwrap_or_else(|| panic!("mgmt host {host} present"));
